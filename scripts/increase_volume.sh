@@ -1,4 +1,4 @@
-HARD_LIMIT=180
+HARD_LIMIT=200
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <increment>"
