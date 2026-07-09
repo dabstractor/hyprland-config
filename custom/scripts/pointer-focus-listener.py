@@ -3,18 +3,24 @@
 pointer-focus-listener.py
 
 Watches Hyprland's IPC socket2 and nudges the cursor (via
-refresh-pointer-focus.sh) whenever the focused/visible surface changes, so seat
-"pointer focus" is re-resolved and scroll/axis events keep working.
+refresh-pointer-focus.sh) whenever pointer focus could have gone stale, so
+scroll/axis events keep working without a manual mouse wiggle.
 
-Problem: after a workspace switch (esp. empty->filled), a monitor focus change,
-or a special-workspace toggle, the compositor's pointer focus can be left stale.
-Scroll events then go nowhere until the mouse is physically moved.
-  https://github.com/hyprwm/Hyprland/discussions/14767
+When does pointer focus go stale?
+  Any time the *focused window* changes without the mouse moving:
+    - workspace switch (esp. empty -> filled)
+      https://github.com/hyprwm/Hyprland/discussions/14767
+    - movefocus / cyclenext / Super+Tab (your pane-nav keybinds)
+    - focus moving to another monitor
+    - special-workspace toggle
 
-A button click no longer rescues you (a click only refocuses when the window
-under the cursor differs from the keyboard-focused window), so we do it
-automatically. `movecursor` runs simulateMouseMovement(), which always
-re-resolves pointer focus -- same code path as a real mouse wiggle.
+Triggers:
+  * workspace / focusedmon / activespecial / moveworkspace -> always jiggle
+  * activewindowv2 -> jiggle ONLY when the focused window ADDRESS changes.
+    Hyprland re-emits activewindow/activewindowv2 on every title or class
+    change of the *already-active* window (e.g. a terminal title updating per
+    command). Deduping by address means those don't twitch the cursor; only a
+    real focus switch to a different window does.
 
 Tunable via environment:
   JIGGLE_DEBOUNCE  seconds to collapse event bursts into one jiggle  (default 0.08)
@@ -25,6 +31,7 @@ Tunable via environment:
 from __future__ import annotations
 
 import itertools
+import json
 import os
 import socket
 import subprocess
@@ -37,10 +44,9 @@ JIGGLE_SCRIPT = os.environ.get(
     "JIGGLE_SCRIPT", os.path.join(HERE, "refresh-pointer-focus.sh")
 )
 
-# socket2 emits "<event>>>payload". These are the events that can leave pointer
-# focus out of sync with what's now on screen.
+# Events that always indicate a possible stale-pointer-focus state.
 TRIGGER_EVENTS = {
-    "workspace",      # active workspace changed (primary trigger)
+    "workspace",      # active workspace changed
     "focusedmon",     # focus moved to another monitor
     "activespecial",  # special workspace opened/closed
     "moveworkspace",  # workspace relocated to another monitor
@@ -51,6 +57,7 @@ SETTLE_S = float(os.environ.get("JIGGLE_SETTLE", "0.03"))
 
 _lock = threading.Lock()
 _last_run = 0.0
+_last_addr: str | None = None  # last focused window address (for activewindowv2 dedup)
 
 
 def log(msg: str) -> None:
@@ -65,7 +72,7 @@ def jiggle() -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-    except Exception as exc:  # noqa: BLE001 - we want to survive any hiccup
+    except Exception as exc:  # noqa: BLE001 - survive any hiccup
         log(f"jiggle failed: {exc}")
 
 
@@ -80,12 +87,39 @@ def schedule_jiggle() -> None:
     threading.Timer(SETTLE_S, jiggle).start()
 
 
+def on_event(event: str, payload: str) -> None:
+    global _last_addr
+    if event in TRIGGER_EVENTS:
+        schedule_jiggle()
+    elif event == "activewindowv2":
+        # Jiggle only on a real focus switch (address changed), never on a
+        # mere title/class refresh of the same window.
+        addr = payload.strip()
+        if addr != _last_addr:
+            _last_addr = addr
+            schedule_jiggle()
+
+
+def init_known_address() -> None:
+    """Seed the known focused-window address so the first event isn't a phantom."""
+    global _last_addr
+    try:
+        out = subprocess.run(
+            ["hyprctl", "activewindow", "-j"],
+            capture_output=True, text=True, timeout=2,
+        )
+        data = json.loads(out.stdout or "{}")
+        _last_addr = (data.get("address") or "").strip()
+    except Exception:
+        _last_addr = ""
+
+
 def resolve_socket2() -> str | None:
     sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
     xdg = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     if sig:
         return f"{xdg}/hypr/{sig}/.socket2.sock"
-    # Fallback: pick the only (or most recent) instance socket.
+    # Fallback: pick the most recent instance socket.
     base = os.path.join(xdg, "hypr")
     try:
         candidates = [
@@ -95,9 +129,7 @@ def resolve_socket2() -> str | None:
         ]
     except FileNotFoundError:
         return None
-    if not candidates:
-        return None
-    return max(candidates, key=os.path.getmtime)
+    return max(candidates, key=os.path.getmtime) if candidates else None
 
 
 def follow(socket_path: str) -> None:
@@ -108,9 +140,7 @@ def follow(socket_path: str) -> None:
         except OSError as exc:
             log(f"connect failed ({exc}); retrying in 2s")
             time.sleep(2)
-            # path may have changed (Hyprland restart); re-resolve.
-            new = resolve_socket2() or socket_path
-            socket_path = new
+            socket_path = resolve_socket2() or socket_path  # may have changed
             continue
 
         with sock.makefile("rb") as stream:
@@ -118,10 +148,8 @@ def follow(socket_path: str) -> None:
                 line = raw.decode("utf-8", "replace").strip()
                 if ">>" not in line:
                     continue
-                event = line.split(">>", 1)[0]
-                if event in TRIGGER_EVENTS:
-                    schedule_jiggle()
-        # stream ended: reconnect.
+                event, _, payload = line.partition(">>")
+                on_event(event, payload)
         log("socket2 closed; reconnecting")
 
 
@@ -130,7 +158,8 @@ def main() -> None:
     if not socket_path or not os.path.exists(socket_path):
         log(f"socket2 not found (resolved: {socket_path!r}); exiting")
         sys.exit(1)
-    log(f"listening on {socket_path} (debounce={DEBOUNCE_S}s, settle={SETTLE_S}s)")
+    init_known_address()
+    log(f"listening on {socket_path} (debounce={DEBOUNCE_S}s, settle={SETTLE_S}s, addr={_last_addr})")
     follow(socket_path)
 
 
