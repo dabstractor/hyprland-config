@@ -12,25 +12,36 @@ reliably by **process ancestry**: every browser agent-browser spawns has an
 never does. (Secondary signal: agent-browser always launches Chrome with
 `--user-data-dir=/tmp/agent-browser-chrome-<uuid>`.)
 
-When a new browser window opens, if it belongs to agent-browser it is moved
-silently (no focus steal, no workspace switch) — keeping your current desktop
-uncluttered. The target workspace is chosen per window:
+When a browser window opens and belongs to agent-browser, it is moved silently
+(no focus steal, no workspace switch) into a confined agent workspace band
+(default workspaces 1-10) so agents never clutter your personal workspaces.
+
+The target workspace is chosen per window:
 
   - if Chrome was launched with `--user-data-dir=<AB_PROFILE_DIR>/<N>` (a
-    numbered agent profile), it goes to workspace <N> (e.g. profile 3 -> ws 3);
-  - otherwise it falls back to TARGET_WORKSPACE (default 1).
+    numbered agent profile), N is folded into the band by modulo:
+    workspace = ((N-1) % AB_PROFILE_WS_MOD) + 1. With the default 10, profiles
+    1/11/21 -> ws 1, 2/12/22 -> ws 2, ... 10/20/30 -> ws 10.
+  - otherwise it falls back to TARGET_WORKSPACE (default 1, inside the band).
+
+A background reconciler (every AB_RECONCILE_SECS) re-checks all windows and
+moves any agent-browser window that strayed off its target (catches missed
+events and hard-enforces the band).
 
 Configuration (env)
 -------------------
-  AB_WORKSPACE   fallback workspace id/name for non-profile windows (default: 1)
-  AB_PROFILE_DIR dir of numbered agent profiles (default: ~/.agent-chrome-profiles)
-  AB_DEBUG=1     append a line per decision to ~/.agent-browser/hypr-ws.log
-  AB_DRY_RUN=1   detect but never move (for verifying distinguisher)
+  AB_WORKSPACE      fallback workspace for non-profile windows (default: 1)
+  AB_PROFILE_DIR    dir of numbered agent profiles (default: ~/.agent-chrome-profiles)
+  AB_PROFILE_WS_MOD size of the agent workspace band (default: 10; 0 = 1:1)
+  AB_RECONCILE_SECS reconciler interval in seconds (default: 5; 0 = off)
+  AB_DEBUG=1        append a line per decision to ~/.agent-browser/hypr-ws.log
+  AB_DRY_RUN=1      detect but never move (for verifying distinguisher)
 
 Usage
 -----
   agent-browser-workspace.py            listen on the Hyprland event socket
-  agent-browser-workspace.py --sweep    move currently-open agent-browser windows now
+  agent-browser-workspace.py --sweep       move currently-open agent-browser windows now
+  agent-browser-workspace.py --reconcile   run one reconciler pass (enforce band)
   agent-browser-workspace.py --check <addr>   report whether <addr> is an agent-browser window
   agent-browser-workspace.py --selftest       run detection/move logic on one live window
 
@@ -43,10 +54,18 @@ import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 
 TARGET_WORKSPACE = os.environ.get("AB_WORKSPACE", "1")
 PROFILE_DIR = os.path.expanduser(os.environ.get("AB_PROFILE_DIR", "~/.agent-chrome-profiles"))
+# Agent windows are confined to a workspace band of this size starting at ws 1.
+# A numbered profile N maps to workspace ((N-1) % PROFILE_WS_MOD) + 1, so with
+# the default 10: profiles 1/11/21 -> ws 1, 2/12/22 -> ws 2, ... 10/20/30 -> 10.
+# Set 0 for a 1:1 passthrough (profile N -> ws N).
+PROFILE_WS_MOD = int(os.environ.get("AB_PROFILE_WS_MOD", "10"))
+# How often (seconds) the background reconciler enforces the band. 0 disables.
+RECONCILE_SECS = float(os.environ.get("AB_RECONCILE_SECS", "5"))
 DEBUG = os.environ.get("AB_DEBUG") == "1"
 DRY_RUN = os.environ.get("AB_DRY_RUN") == "1"
 LOGFILE = os.path.expanduser("~/.agent-browser/hypr-ws.log")
@@ -79,6 +98,16 @@ def hyprctl(*args: str) -> str:
     except Exception as e:
         log(f"hyprctl {args[0]} error: {e}")
         return ""
+
+
+def move_window_silent(target: str, addr_0x: str) -> str:
+    """Move the window with a 0x-prefixed `address` to workspace `target`
+    without following (silent), via the 0.55 `hyprctl dispatch` Lua form.
+    (Replaces the old `hyprctl dispatch movetoworkspacesilent T,address:0xA`.)"""
+    return hyprctl(
+        "dispatch",
+        f'hl.dsp.window.move({{ workspace = {target}, window = "address:{addr_0x}", follow = false }})',
+    )
 
 
 def canonical_addr(addr: str) -> str:
@@ -170,9 +199,13 @@ def is_agent_browser_window(pid: int) -> bool:
 
 
 def profile_workspace_from_udd(udd):
-    """Map a Chrome --user-data-dir to a workspace id if it lives under
-    AB_PROFILE_DIR with an integer leaf (e.g. .../.agent-chrome-profiles/3 -> '3').
-    Returns None otherwise."""
+    """Map a Chrome --user-data-dir to a profile id if it lives under
+    AB_PROFILE_DIR. Returns the integer profile segment as a string, found
+    anywhere in the relative path, so layouts like:
+      <AB_PROFILE_DIR>/<N>              -> 'N'
+      <AB_PROFILE_DIR>/active/<N>        -> 'N'
+      <AB_PROFILE_DIR>/active/<N>/Default -> 'N'
+    all work. Returns None if not under AB_PROFILE_DIR or no numeric segment."""
     if not udd:
         return None
     try:
@@ -186,8 +219,25 @@ def profile_workspace_from_udd(udd):
         return None
     if rel == "." or rel == ".." or rel.startswith(".." + os.sep):
         return None
-    first = rel.split(os.sep)[0]
-    return first if re.fullmatch(r"\d+", first) else None
+    for seg in rel.split(os.sep):
+        if re.fullmatch(r"\d+", seg):
+            return seg
+    return None
+
+
+def profile_to_workspace(leaf):
+    """Fold a numbered profile leaf into the agent workspace band:
+    profile N -> workspace ((N-1) % PROFILE_WS_MOD) + 1.
+    None if leaf isn't a number. If PROFILE_WS_MOD <= 0, passthrough N -> N."""
+    if not leaf:
+        return None
+    try:
+        n = int(leaf)
+    except (TypeError, ValueError):
+        return None
+    if PROFILE_WS_MOD <= 0:
+        return str(n)
+    return str(((n - 1) % PROFILE_WS_MOD) + 1)
 
 
 def is_agent_browser_udd(udd):
@@ -213,10 +263,10 @@ def is_agent_browser_udd(udd):
 
 
 def target_workspace_for(pid: int) -> str:
-    """Where an agent-browser window should live: its profile workspace (if
-    launched with a numbered profile under AB_PROFILE_DIR), else the default."""
+    """Where an agent-browser window should live: its profile workspace folded
+    into the agent band (if launched with a numbered profile), else default."""
     _ab, udd = inspect_window(pid)
-    return profile_workspace_from_udd(udd) or TARGET_WORKSPACE
+    return profile_to_workspace(profile_workspace_from_udd(udd)) or TARGET_WORKSPACE
 
 
 def move_if_agent_browser(addr: str) -> str:
@@ -234,9 +284,9 @@ def move_if_agent_browser(addr: str) -> str:
     if not (is_ab or is_agent_browser_udd(udd)):
         log(f"{addr}: class={cls} pid={pid} -> personal browser (left alone)")
         return "personal"
-    prof = profile_workspace_from_udd(udd)
-    target = prof or TARGET_WORKSPACE
-    via = f"profile={prof}" if prof else "default"
+    leaf = profile_workspace_from_udd(udd)
+    target = profile_to_workspace(leaf) or TARGET_WORKSPACE
+    via = f"profile={leaf}->ws{target}" if leaf else "default"
     full_addr = cl.get("address")  # 0x-prefixed, as the dispatcher expects
     ws = (cl.get("workspace") or {}).get("name") or (cl.get("workspace") or {}).get("id")
     if str(ws) == str(target):
@@ -245,7 +295,7 @@ def move_if_agent_browser(addr: str) -> str:
     if DRY_RUN:
         log(f"{addr}: class={cls} pid={pid} -> DRY-RUN would move {ws}->{target} ({via})")
         return "dry-run"
-    hyprctl("dispatch", "movetoworkspacesilent", f"{target},address:{full_addr}")
+    move_window_silent(target, full_addr)
     log(f"{addr}: class={cls} pid={pid} -> moved {ws}->{target} ({via})")
     return "moved"
 
@@ -262,6 +312,45 @@ def handle_open(addr: str) -> None:
     log(f"{norm}: never appeared in clients (skipped)")
 
 
+def reconcile() -> int:
+    """Safety net: move any agent-browser window not on its target workspace.
+    Catches missed openwindow events and hard-enforces the agent band so agents
+    never linger on personal workspaces. Personal browsers are skipped silently
+    (logging them at the reconcile cadence would spam)."""
+    moved = 0
+    for addr, cl in clients_map().items():
+        cls = (cl.get("class") or "").lower()
+        if cls not in BROWSER_CLASSES:
+            continue
+        pid = cl.get("pid")
+        is_ab, udd = inspect_window(pid)
+        if not (is_ab or is_agent_browser_udd(udd)):
+            continue
+        leaf = profile_workspace_from_udd(udd)
+        target = profile_to_workspace(leaf) or TARGET_WORKSPACE
+        cur = (cl.get("workspace") or {}).get("id")
+        if cur is None or str(cur) == str(target):
+            continue
+        if DRY_RUN:
+            log(f"reconcile DRY: {addr} would move ws {cur}->{target} (profile={leaf})")
+            continue
+        move_window_silent(target, cl.get("address"))
+        log(f"reconcile: {addr} class={cls} pid={pid} moved ws {cur}->{target} (profile={leaf})")
+        moved += 1
+    return moved
+
+
+def _reconcile_loop() -> None:
+    while True:
+        try:
+            time.sleep(RECONCILE_SECS)
+            n = reconcile()
+            if n:
+                log(f"reconcile pass: {n} strayed window(s) corrected")
+        except Exception as e:
+            log(f"reconcile loop error: {e}")
+
+
 def listen() -> None:
     sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
     xdg = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
@@ -269,7 +358,10 @@ def listen() -> None:
     if not sig or not os.path.exists(sock_path):
         print(f"agent-browser-workspace: Hyprland socket not found ({sock_path}); exiting.", file=sys.stderr)
         sys.exit(1)
-    log(f"listener start -> target workspace {TARGET_WORKSPACE} (dry_run={DRY_RUN})")
+    log(f"listener start -> band 1..{PROFILE_WS_MOD or 'n/a'}, "
+        f"reconcile every {RECONCILE_SECS}s (dry_run={DRY_RUN})")
+    if RECONCILE_SECS > 0:
+        threading.Thread(target=_reconcile_loop, daemon=True).start()
     while True:
         try:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -312,10 +404,11 @@ def check(addr: str) -> None:
     if not cl:
         print(f"{addr}: no such window"); return
     is_ab, udd = inspect_window(cl.get("pid"))
-    prof = profile_workspace_from_udd(udd)
+    leaf = profile_workspace_from_udd(udd)
+    target = profile_to_workspace(leaf) or TARGET_WORKSPACE
     print(f"{addr}: class={cl.get('class')} pid={cl.get('pid')} "
-          f"agent_browser={is_ab} profile_ws={prof or '-'} "
-          f"target_ws={prof or TARGET_WORKSPACE} workspace={cl.get('workspace')}")
+          f"agent_browser={is_ab or is_agent_browser_udd(udd)} "
+          f"profile={leaf or '-'} target_ws={target} workspace={cl.get('workspace')}")
 
 
 def selftest() -> None:
@@ -333,11 +426,11 @@ def selftest() -> None:
           f"(currently ws {orig}, target ws {target})")
     if DRY_RUN:
         print("AB_DRY_RUN set -> not moving"); return
-    print("move ->", hyprctl("dispatch", "movetoworkspacesilent", f"{target},address:{addr}"))
+    print("move ->", move_window_silent(target, cl.get("address")))
     time.sleep(0.2)
     now = clients_map().get(addr, {}).get("workspace", {}).get("id")
     print(f"now on ws {now} (expected {target}) -> {'OK' if str(now)==str(target) else 'FAIL'}")
-    print("restore ->", hyprctl("dispatch", "movetoworkspacesilent", f"{orig},address:{addr}"))
+    print("restore ->", move_window_silent(orig, cl.get("address")))
 
 
 def main() -> None:
@@ -346,6 +439,9 @@ def main() -> None:
         listen()
     elif args[0] == "--sweep":
         sweep()
+    elif args[0] == "--reconcile":
+        n = reconcile()
+        print(f"reconcile: {n} window(s) moved")
     elif args[0] == "--check" and len(args) > 1:
         check(args[1])
     elif args[0] == "--selftest":
