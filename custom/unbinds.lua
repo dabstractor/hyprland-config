@@ -4,45 +4,45 @@
 
 ---@module 'hl'
 
-hl.unbind("SUPER + SUPER_L")
+-- hl.unbind("SUPER + SUPER_L")
 
-hl.unbind("SUPER + SUPER_R")
+-- hl.unbind("SUPER + SUPER_R")
 
-hl.unbind("SUPER + SUPER_L")
+-- hl.unbind("SUPER + SUPER_L")
 
-hl.unbind("SUPER + SUPER_R")
+-- hl.unbind("SUPER + SUPER_R")
 
 -- hl.unbind("SUPER + catchall")  (no catchall bind defined in lua)
 
-hl.unbind("CTRL + SUPER_L")
+-- hl.unbind("CTRL + SUPER_L")
 
-hl.unbind("CTRL + SUPER_R")
+-- hl.unbind("CTRL + SUPER_R")
 
 -- hl.unbind("SUPER + mouse:")  (no wildcard mouse: in lua; individual buttons unbound below)
 
-hl.unbind("SUPER + mouse:273")
+-- hl.unbind("SUPER + mouse:273")
 
-hl.unbind("SUPER + mouse:274")
+-- hl.unbind("SUPER + mouse:274")
 
-hl.unbind("SUPER + mouse:275")
+-- hl.unbind("SUPER + mouse:275")
 
-hl.unbind("SUPER + mouse:276")
+-- hl.unbind("SUPER + mouse:276")
 
-hl.unbind("SUPER + mouse:277")
+-- hl.unbind("SUPER + mouse:277")
 
-hl.unbind("SUPER + mouse_up")
+-- hl.unbind("SUPER + mouse_up")
 
-hl.unbind("SUPER + mouse_down")
+-- hl.unbind("SUPER + mouse_down")
 
-hl.unbind("SUPER_L")
+-- hl.unbind("SUPER_L")
 
-hl.unbind("SUPER_R")
+-- hl.unbind("SUPER_R")
 
-hl.unbind("SUPER + V")
+-- hl.unbind("SUPER + V")
 
-hl.unbind("SUPER + Period")
+-- hl.unbind("SUPER + Period")
 
-hl.unbind("SUPER + Tab")
+-- hl.unbind("SUPER + Tab")
 
 hl.unbind("SUPER + A")
 
@@ -50,11 +50,11 @@ hl.unbind("SUPER+ALT + A")
 
 hl.unbind("SUPER + B")
 
-hl.unbind("SUPER + O")
+-- hl.unbind("SUPER + O")
 
 hl.unbind("SUPER + N")
 
-hl.unbind("SUPER + Slash")
+-- hl.unbind("SUPER + Slash")
 
 hl.unbind("SUPER + K")
 
@@ -62,11 +62,11 @@ hl.unbind("SUPER + M")
 
 hl.unbind("SUPER + G")
 
-hl.unbind("CTRL+ALT + Delete")
+-- hl.unbind("CTRL+ALT + Delete")
 
 hl.unbind("SUPER + J")
 
-hl.unbind("SHIFT+SUPER+ALT + Slash")
+-- hl.unbind("SHIFT+SUPER+ALT + Slash")
 
 -- Switch workspacs
 

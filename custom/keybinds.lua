@@ -240,15 +240,18 @@ hl.bind("CTRL + SUPER + SHIFT + down", function()
 	move_or_focus(0, 40, "down")
 end)
 
--- Swap windows
-hl.bind("CTRL + ALT + SUPER + H", hl.dsp.window.move({ direction = "left" }))
-hl.bind("CTRL + ALT + SUPER + L", hl.dsp.window.move({ direction = "right" }))
-hl.bind("CTRL + ALT + SUPER + K", hl.dsp.window.move({ direction = "up" }))
-hl.bind("CTRL + ALT + SUPER + J", hl.dsp.window.move({ direction = "down" }))
-hl.bind("CTRL + ALT + SUPER + mouse_down", hl.dsp.window.move({ direction = "left" }))
-hl.bind("CTRL + ALT + SUPER + mouse_up", hl.dsp.window.move({ direction = "right" }))
-hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_down", hl.dsp.window.move({ direction = "up" }))
-hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_up", hl.dsp.window.move({ direction = "down" }))
+-- Swap windows (geometry-preserving: uses `swapwindow`, which only exchanges which
+-- window occupies a node, so the current split ratio is kept. Do NOT use `window.move`
+-- here -- that dispatches `movewindow`, which removes+reinserts the window and
+-- re-reads dwindle:default_split_ratio, snapping every swap back to the default.)
+hl.bind("CTRL + ALT + SUPER + H", hl.dsp.window.swap({ direction = "left" }))
+hl.bind("CTRL + ALT + SUPER + L", hl.dsp.window.swap({ direction = "right" }))
+hl.bind("CTRL + ALT + SUPER + K", hl.dsp.window.swap({ direction = "up" }))
+hl.bind("CTRL + ALT + SUPER + J", hl.dsp.window.swap({ direction = "down" }))
+hl.bind("CTRL + ALT + SUPER + mouse_down", hl.dsp.window.swap({ direction = "left" }))
+hl.bind("CTRL + ALT + SUPER + mouse_up", hl.dsp.window.swap({ direction = "right" }))
+hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_down", hl.dsp.window.swap({ direction = "up" }))
+hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_up", hl.dsp.window.swap({ direction = "down" }))
 
 -- Overdrive volume controls
 hl.bind(
@@ -305,6 +308,13 @@ hl.bind("SUPER + Z", hl.dsp.exec_cmd("agsv1 run-js 'toggleCurrentWorkspaceBarVis
 
 -- Launcher
 hl.bind("SUPER + Space", hl.dsp.exec_cmd("vicinae toggle"))
+
+-- Super + left-drag to move (float) windows. This is an end4 default
+-- (hyprland/keybinds.lua binds SUPER+mouse:272 -> window.drag), but
+-- unbinds.lua clears the whole SUPER+mouse:* namespace to reclaim it; re-bind
+-- it here so drag-to-move survives (only the side buttons 275/276 are reclaimed
+-- below for workspace injection).
+hl.bind("SUPER + mouse:272", hl.dsp.window.drag(), { mouse = true })
 
 -- Workspace injection / deletion (native; was inject_workspace.sh / delete_workspace.sh)
 hl.bind("SUPER + mouse:275", function()
