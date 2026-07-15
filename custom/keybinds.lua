@@ -251,7 +251,11 @@ hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_down", hl.dsp.window.move({ directio
 hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_up", hl.dsp.window.move({ direction = "down" }))
 
 -- Overdrive volume controls
-hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("~/.config/hypr/scripts/increase_volume.sh 5"), { locked = true, repeating = true })
+hl.bind(
+	"XF86AudioRaiseVolume",
+	hl.dsp.exec_cmd("~/.config/hypr/scripts/increase_volume.sh 5"),
+	{ locked = true, repeating = true }
+)
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("pamixer --allow-boost -d 5"), { locked = true, repeating = true })
 
 -- Resize windows — routed through resize_if_ok so the locked terminal is skipped.
@@ -325,7 +329,10 @@ hl.bind("SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profi
 hl.bind("CTRL + SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 1"))
 hl.bind("ALT + SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 2"))
 hl.bind("SHIFT + SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 8"))
-hl.bind("SHIFT + ALT + SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 3"))
+hl.bind(
+	"SHIFT + ALT + SUPER + P",
+	hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 3")
+)
 hl.bind("CTRL + ALT + SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 4"))
 
 -- Cycle panel family
@@ -333,3 +340,5 @@ hl.bind("SUPER + ALT + Slash", hl.dsp.global("quickshell:panelFamilyCycle"))
 
 -- Voice typing (was: source ~/projects/voice-typing/hypr-binds.conf)
 hl.bind("SUPER + ALT + D", hl.dsp.exec_cmd("/home/dustin/projects/voice-typing/.venv/bin/voicectl toggle"))
+
+hl.bind("SUPER + e", hl.dsp.global("quickshell:overviewEmojiToggle"))
