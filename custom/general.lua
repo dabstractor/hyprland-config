@@ -24,6 +24,19 @@ hl.config({
 	},
 })
 
+-- Dwindle split: instead of a 50/50 split, the RIGHT window takes ~80% of the
+-- screen (left ~20%). Geometry is LEFT = width/2 * ratio, so ratio = 0.4 makes
+-- the left 20% and the right 80%. This is positional (split_bias stays 0), so it
+-- applies whenever a window lands on the right -- including after swaps, which
+-- only exchange which window occupies a node (the 80% geometry persists).
+-- Note: this same ratio also affects top/bottom splits (bottom gets ~80%).
+-- Tweak live with SUPER+; / SUPER+' (splitratio -0.1 / +0.1).
+hl.config({
+	dwindle = {
+		default_split_ratio = 0.6,
+	},
+})
+
 -- Snappy animations — fast durations, minimal easing
 
 hl.config({
