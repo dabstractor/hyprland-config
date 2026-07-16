@@ -19,11 +19,20 @@ hl.window_rule({
 -- DevTools.
 hl.window_rule({ match = { title = "^DevTools" }, tile = true })
 
--- Calculator.
+-- Calculator: float at a sane size in the bottom-right corner -- 2% off the
+-- right edge, 5% off the bottom. gnome-calculator's class is org.gnome.Calculator
+-- and it ignores size rules (it constrains to a ~360px min width), so the move
+-- expression uses the window-rule position vars (window_w/h, monitor_w/h -- all
+-- logical, evaluated by muParser) to adapt to whatever size it actually takes.
+-- The old rule omitted `float` (so size/move were ignored on the tiled window)
+-- and used the brittle `100%-400px` form, which never parsed -- landing it
+-- centered. No show-time move is needed; the position set here persists across
+-- hyprscratch show/hide (which only re-applies float+size, keeping top-left).
 hl.window_rule({
 	match = { title = "^(Calculator)$" },
-	move = { "100%-400", "100%-710" },
+	float = true,
 	size = { "400", "600" },
+	move = { "monitor_w - window_w - monitor_w * 0.02", "monitor_h - window_h - monitor_h * 0.05" },
 })
 
 -- ClickUp (title match).

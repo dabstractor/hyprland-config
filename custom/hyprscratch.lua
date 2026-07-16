@@ -77,6 +77,56 @@ local function summon_focused(title)
 	end, { timeout = 100, type = "repeat" })
 end
 
+-- Find a scratchpad window by its stable creation-time title/class, but ONLY
+-- when it is currently shown (mapped on a normal, non-special workspace).
+-- hyprscratch hides a scratchpad by parking it on a special workspace, so this
+-- returns nil while hidden -- letting callers skip no-op work (e.g. a delayed
+-- re-draw) on a HIDE toggle.
+local function find_visible_scratchpad(title)
+	for _, w in ipairs(hl.get_windows()) do
+		if (w.initial_title == title or w.initial_class == title)
+			and w.mapped and w.workspace and not w.workspace.special and w.workspace.id > 0 then
+			return w
+		end
+	end
+	return nil
+end
+
+-- Re-draw a scratchpad's geometry ({ size = {w,h}, center = true }) after a
+-- short delay.
+--
+-- Some apps -- notably Electron ones like Figma -- map at one size/position
+-- and then resize/reposition themselves shortly after opening. hyprscratch
+-- applies the scratchpad's `rules` at SHOW time, so a window that reshapes
+-- itself afterwards clobbers that geometry and lands in the wrong spot (Figma
+-- piles into the bottom-right corner until you nudge it, at which point
+-- Hyprland re-lays it out and it snaps to center). Re-asserting the geometry
+-- after the app has settled re-draws it where it's supposed to be.
+--
+-- The toggle may be a SHOW or a HIDE; on HIDE the window is on a special
+-- workspace so find_visible_scratchpad returns nil and we correctly no-op.
+-- Generalizable: pass any scratchpad's title + intended geometry + delay.
+local function redraw_scratchpad_after(title, geometry, delay_ms)
+	hl.timer(function()
+		local w = find_visible_scratchpad(title)
+		if not w then
+			return
+		end
+		local addr = "address:" .. w.address
+		if geometry.size then
+			hl.dispatch(hl.dsp.window.resize({
+				x = geometry.size[1],
+				y = geometry.size[2],
+				relative = false, -- exact pixel size (not a delta)
+				window = addr,
+			}))
+		end
+		if geometry.center then
+			hl.dispatch(hl.dsp.window.center({ window = addr }))
+		end
+	end, { timeout = delay_ms, type = "oneshot" })
+end
+
 -- Terminal
 hl.bind("ALT + Space", function()
 	hl.exec_cmd("hyprscratch toggle terminal")
@@ -97,7 +147,14 @@ hl.bind("XF86Calculator", toggle_calculator)
 
 -- Collaboration tools
 hl.bind("SUPER + U", hl.dsp.exec_cmd("hyprscratch toggle ClickUp"))
-hl.bind("SUPER + ALT + F", hl.dsp.exec_cmd("hyprscratch toggle Figma"))
+-- Figma -- Electron reshapes the window after it maps, clobbering the
+-- size+center hyprscratch applies at show time (it piles into the bottom-right
+-- until nudged). Re-draw 0.5s later, once it has settled, using the same
+-- geometry as the Figma rules in hyprscratch.conf. See redraw_scratchpad_after.
+hl.bind("SUPER + ALT + F", function()
+	hl.exec_cmd("hyprscratch toggle Figma")
+	redraw_scratchpad_after("figma-linux", { size = { 3560, 2060 }, center = true }, 500)
+end)
 hl.bind("ALT + SUPER + M", hl.dsp.exec_cmd("hyprscratch toggle Signal"))
 hl.bind("SUPER + M", hl.dsp.exec_cmd("hyprscratch toggle Mattermost"))
 hl.bind("ALT + SUPER + U", hl.dsp.exec_cmd("hyprscratch toggle Docmost"))
