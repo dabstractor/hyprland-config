@@ -349,6 +349,7 @@ hl.bind("CTRL + ALT + SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port
 hl.bind("SUPER + ALT + Slash", hl.dsp.global("quickshell:panelFamilyCycle"))
 
 -- Voice typing (was: source ~/projects/voice-typing/hypr-binds.conf)
-hl.bind("SUPER + ALT + D", hl.dsp.exec_cmd("/home/dustin/projects/voice-typing/.venv/bin/voicectl toggle"))
+-- hl.bind("CTRL + ALT + SUPER + D", hl.dsp.exec_cmd("/home/dustin/projects/voice-typing/.venv/bin/voicectl toggle"))       -- big model (distil-large-v3 + small.en)
+hl.bind("SUPER + ALT + D", hl.dsp.exec_cmd("/home/dustin/projects/voice-typing/.venv/bin/voicectl toggle-lite")) -- little/lite model (small.en only)
 
 hl.bind("SUPER + e", hl.dsp.global("quickshell:overviewEmojiToggle"))

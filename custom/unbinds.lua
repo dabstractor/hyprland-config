@@ -48,11 +48,14 @@ hl.unbind("SUPER + A")
 
 hl.unbind("SUPER+ALT + A")
 
+hl.unbind("SUPER+ALT + D")
+hl.unbind("CTRL+SUPER+ALT + D")
+
 hl.unbind("SUPER + B")
 
 -- hl.unbind("SUPER + O")
 
-hl.unbind("SUPER + N")
+-- hl.unbind("SUPER + N")
 
 -- hl.unbind("SUPER + Slash")
 
