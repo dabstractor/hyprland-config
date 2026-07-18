@@ -125,6 +125,8 @@ hl.window_rule({
 
 -- Steam apps — fullscreen.
 hl.window_rule({ match = { class = "^steam_app.*" }, fullscreen = true })
+-- Looking Glass client (VM display passthrough) — always true fullscreen.
+hl.window_rule({ match = { class = "^looking-glass-client$" }, fullscreen = true })
 -- .exe apps — fullscreen.
 hl.window_rule({ match = { class = "^.*\\.exe$" }, fullscreen = true })
 -- Steam apps (alternate pattern).
