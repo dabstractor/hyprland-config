@@ -11,6 +11,13 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd("~/.config/hypr/scripts/clipboard-sync.sh")
 	hl.exec_cmd("kanshi")
 	hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
+	-- Portal startup-race fix: xdg-desktop-portal-hyprland is sometimes D-Bus
+	-- activated before WAYLAND_DISPLAY reaches the dbus/systemd activation env,
+	-- so it fails to connect to the compositor, retries 3x, hits systemd's
+	-- start-rate-limit and stays dead for the whole session -> no screen share.
+	-- Now that Hyprland + the env are up, clear any failed state and restart the
+	-- portal stack so the Hyprland backend connects cleanly.
+	hl.exec_cmd("sleep 2; systemctl --user reset-failed xdg-desktop-portal-hyprland 2>/dev/null; systemctl --user restart xdg-desktop-portal-hyprland xdg-desktop-portal")
 	hl.exec_cmd("mkdir -p /run/user/1000/hyprpm")
 	hl.exec_cmd("syncthing")
 	hl.exec_cmd("udiskie")
