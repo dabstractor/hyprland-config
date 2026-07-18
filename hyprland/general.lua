@@ -78,7 +78,6 @@ hl.config({
 			enabled = true,
 			xray = true,
 			special = false,
-			new_optimizations = true,
 			size = 10,
 			passes = 3,
 			brightness = 1,

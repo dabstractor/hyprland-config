@@ -21,6 +21,9 @@ hl.config({
 hl.config({
 	decoration = {
 		rounding = 8,
+		blur = {
+			new_optimizations = false, -- disable blur caching; always re-sample background (NVIDIA damage-tracking workaround)
+		},
 	},
 })
 
