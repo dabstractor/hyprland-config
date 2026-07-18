@@ -4,6 +4,12 @@
 
 ---@module 'hl'
 
+-- Remove the ALT+F4 "Wrong close keybind" reminder notification (defined in
+-- hyprland/keybinds.lua). With no bind at all, the unbound keypress falls
+-- through to the focused surface, so Alt+F4 still reaches Windows VMs running
+-- under looking-glass — it just no longer fires the nag notification.
+hl.unbind("ALT + F4")
+
 -- hl.unbind("SUPER + SUPER_L")
 
 -- hl.unbind("SUPER + SUPER_R")
