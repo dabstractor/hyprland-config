@@ -353,3 +353,10 @@ hl.bind("SUPER + ALT + Slash", hl.dsp.global("quickshell:panelFamilyCycle"))
 hl.bind("SUPER + ALT + D", hl.dsp.exec_cmd("/home/dustin/projects/voice-typing/.venv/bin/voicectl toggle-lite")) -- little/lite model (small.en only)
 
 hl.bind("SUPER + e", hl.dsp.global("quickshell:overviewEmojiToggle"))
+
+hl.bind("SUPER + Tab", hl.dsp.global("quickshell:cyclenext"), { description = "Shell: Toggle overview" })
+hl.bind(
+	"ALT + SUPER + Tab",
+	hl.dsp.global("quickshell:overviewWorkspacesToggle"),
+	{ description = "Shell: Toggle overview" }
+)

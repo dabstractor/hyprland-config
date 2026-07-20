@@ -48,7 +48,7 @@ hl.unbind("ALT + F4")
 
 -- hl.unbind("SUPER + Period")
 
--- hl.unbind("SUPER + Tab")
+hl.unbind("SUPER + Tab")
 
 hl.unbind("SUPER + A")
 
