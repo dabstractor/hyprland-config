@@ -36,7 +36,7 @@ hl.config({
 -- Tweak live with SUPER+; / SUPER+' (splitratio -0.1 / +0.1).
 hl.config({
 	dwindle = {
-		default_split_ratio = 0.6,
+		default_split_ratio = 1,
 	},
 })
 
