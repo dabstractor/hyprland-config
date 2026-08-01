@@ -95,7 +95,7 @@ hl.window_rule({
 hl.window_rule({
 	match = { title = "^YouTube Music" },
 	float = true,
-	size = { "60%", "80%" },
+	size = { "40%", "60%" },
 	center = true,
 })
 
@@ -139,6 +139,26 @@ hl.window_rule({ match = { title = "Bitwarden" }, size = { "200", "400" } })
 -- pgmodeler.
 hl.window_rule({ match = { class = "^pgmodeler$" }, float = true })
 hl.window_rule({ match = { title = "^pgModeler  - .*" }, tile = true })
+
+-- swayimg - always open fullscreen.
+-- NOTE: the naive static rule `hl.window_rule({ match = { class = "^swayimg$" },
+-- fullscreen = true })` does NOT work here. swayimg is Wayland-native and sizes its
+-- toplevel to the image AFTER mapping, without itself requesting fullscreen.
+-- Hyprland applies the static rule at open, but the client's subsequent
+-- configure/commit drops the fullscreen state (verified: a fresh swayimg comes
+-- up with fs=0). steam/looking-glass/.exe rules appear to work only because
+-- those apps self-request fullscreen at the protocol level; swayimg does not.
+-- Dispatching fullscreen from a `window.open` listener (fired after the window
+-- is fully initialized) reliably sticks, so we use that instead.
+hl.on("window.open", function(w)
+	if w ~= nil and w.class == "swayimg" and w.address ~= nil then
+		hl.dispatch(hl.dsp.window.fullscreen({
+			mode = "fullscreen",
+			action = "set",
+			window = "address:" .. w.address,
+		}))
+	end
+end)
 
 ----------------------------------------------------------------------
 -- Terminal focus guard (replaces scripts/term-focus-guard.sh + the dead

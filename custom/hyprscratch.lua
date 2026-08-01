@@ -143,6 +143,150 @@ local function redraw_scratchpad_after(title, geometry, delay_ms)
 end
 
 ----------------------------------------------------------------------
+-- Terminal scratchpad alignment self-heal
+--
+-- PROBLEM: the floating terminal scratchpad (defined in
+-- hyprscratch.conf) is intermittently misaligned when toggled OPEN --
+-- its size/position land somewhere other than its rules dictate.
+-- Switching workspaces and re-opening fixes it (a Hyprland re-layout
+-- reapplies geometry); this makes that fix automatic.
+--
+-- HOW: after a SHOW toggle, once hyprscratch has applied its show-time
+-- rules, read the terminal's live geometry and compare it to what the
+-- `rules` in hyprscratch.conf *should* produce for the monitor it's on.
+-- Re-apply the exact size + move (absolute) ONLY if it actually drifted.
+-- A HIDE toggle no-ops -- the window is parked on a special workspace,
+-- so find_visible_scratchpad returns nil.
+--
+-- The target geometry is parsed straight out of hyprscratch.conf (the
+-- `monitor_w`/`monitor_h` expressions are evaluated against the window's
+-- real monitor), so this stays correct if the terminal's rules change.
+-- Any parse failure makes us skip -- never worse than today's behavior.
+
+-- Round half up, matching how Hyprland stores integer window geometry.
+local function round(n)
+	return math.floor(n + 0.5)
+end
+
+-- Evaluate a hyprscratch geometry expression ("monitor_w*0.997",
+-- "monitor_h*0.976", a bare pixel count like "3560", etc.) against a
+-- monitor's dimensions. Returns a number, or nil on any failure.
+local function eval_geometry_expr(expr, monitor_w, monitor_h)
+	local sub = (expr:gsub("monitor_w", tostring(monitor_w)):gsub("monitor_h", tostring(monitor_h)))
+	local fn = load("return " .. sub)
+	if not fn then
+		return nil
+	end
+	local ok, val = pcall(fn)
+	if not ok or type(val) ~= "number" then
+		return nil
+	end
+	return val
+end
+
+-- Parse a named scratchpad block out of hyprscratch.conf and return its
+-- target geometry for the given monitor: { x, y, w, h } in absolute
+-- screen coordinates (the move value is offset by the monitor's position,
+-- the way hyprscratch places a scratchpad onto a specific output).
+-- Returns nil if the block, its rules, or the size/move expressions can't
+-- be found/evaluated.
+local function parse_scratchpad_geometry(block_name, monitor)
+	if not monitor then
+		return nil
+	end
+	local f = io.open(HOME .. "/.config/hypr/hyprscratch.conf", "r")
+	if not f then
+		return nil
+	end
+	local conf = f:read("*a")
+	f:close()
+
+	-- hyprscratch blocks are flat (no nesting), so %b{} captures the whole
+	-- block. The leading \n anchors the match to a block opener on its own
+	-- line (avoids matching "terminal" inside another block's command).
+	local block = conf:match("\n" .. block_name .. "%s-(%b{})")
+	if not block then
+		return nil
+	end
+	local rules = block:match("rules%s*=%s*([^\n]+)")
+	if not rules then
+		return nil -- no size/move rules -> nothing to enforce
+	end
+
+	local sw_expr, sh_expr = rules:match("size%s*%(([^)]*)%)%s*%(([^)]*)%)")
+	local mx_expr, my_expr = rules:match("move%s*%(([^)]*)%)%s*%(([^)]*)%)")
+	if not (sw_expr and sh_expr and mx_expr and my_expr) then
+		return nil
+	end
+
+	local mw, mh = monitor.width, monitor.height
+	local sw = eval_geometry_expr(sw_expr, mw, mh)
+	local sh = eval_geometry_expr(sh_expr, mw, mh)
+	local mx = eval_geometry_expr(mx_expr, mw, mh)
+	local my = eval_geometry_expr(my_expr, mw, mh)
+	if not (sw and sh and mx and my) then
+		return nil
+	end
+
+	return {
+		x = monitor.x + round(mx),
+		y = monitor.y + round(my),
+		w = round(sw),
+		h = round(sh),
+	}
+end
+
+-- Tolerance for "close enough". Correctly placed floating geometry is
+-- integer pixel-exact, so a few px cleanly separates aligned from drifted
+-- (which is always off by far more than this).
+local ALIGN_TOLERANCE_PX = 5
+
+-- If the visible terminal scratchpad's geometry doesn't match its
+-- hyprscratch.conf rules (within ALIGN_TOLERANCE_PX), re-apply the exact
+-- size + move. No-op when the terminal isn't shown (a HIDE toggle, or not
+-- running) or when its target geometry can't be parsed.
+local function check_and_fix_terminal_alignment()
+	local w = find_visible_scratchpad("terminal")
+	if not w then
+		return
+	end
+	local target = parse_scratchpad_geometry("terminal", w.monitor or hl.get_active_monitor())
+	if not target then
+		return
+	end
+
+	-- Window geometry uses Hyprland's vec2 form: { x = ..., y = ... } (for
+	-- size, x is width, y is height). off()'s `cur or 1e9` guard treats any
+	-- unexpected nil as "way off" -> triggers a (correct) re-apply.
+	local ax, ay = w.at.x, w.at.y
+	local sw, sh = w.size.x, w.size.y
+
+	local function off(cur, want)
+		return math.abs((cur or 1e9) - want) > ALIGN_TOLERANCE_PX
+	end
+
+	-- All four within tolerance -> aligned, leave it alone.
+	if not (off(ax, target.x) or off(ay, target.y) or off(sw, target.w) or off(sh, target.h)) then
+		return
+	end
+
+	local addr = "address:" .. w.address
+	-- size first, then move -- mirrors hyprscratch's `size;move` rule order.
+	hl.dispatch(hl.dsp.window.resize({
+		x = target.w,
+		y = target.h,
+		relative = false, -- exact pixel size (not a delta)
+		window = addr,
+	}))
+	hl.dispatch(hl.dsp.window.move({
+		x = target.x,
+		y = target.y,
+		relative = false, -- absolute screen position
+		window = addr,
+	}))
+end
+
+----------------------------------------------------------------------
 -- Binds
 --
 -- The terminal is special: it IS the window term-focus-guard protects, so its
@@ -151,6 +295,11 @@ hl.bind("ALT + Space", function()
 	hl.exec_cmd("hyprscratch toggle terminal")
 	-- hyprscratch toggle is async; re-check visibility shortly after it settles.
 	hl.timer(sync_term_focus_guard, { timeout = 150, type = "oneshot" })
+	-- Self-heal the terminal's geometry: once hyprscratch has applied its
+	-- show-time rules, verify the window actually landed on its target
+	-- size/position and re-apply them if it drifted. (No-ops on a HIDE
+	-- toggle -- the window is then off a normal workspace.)
+	hl.timer(check_and_fix_terminal_alignment, { timeout = 250, type = "oneshot" })
 end)
 
 -- Every other scratchpad goes through toggle_scratchpad so they all grab focus
@@ -160,6 +309,8 @@ end)
 -- (and define them in hyprscratch.conf) -- they pick up the focus behavior for
 -- free.
 local scratchpads = {
+	-- VM viewer: Looking Glass -> qmk-win (see hyprscratch.conf)
+	{ key = "ALT + SUPER + W", name = "Looking_Glass", title = "looking-glass-client" },
 	-- System monitor
 	{ key = "SUPER + b", name = "btop", title = "btop" },
 	-- Calculator (two keys -> same toggle)
@@ -171,7 +322,6 @@ local scratchpads = {
 	{ key = "SUPER + M", name = "Mattermost", title = "Mattermost" },
 	{ key = "ALT + SUPER + U", name = "Docmost", title = "Docmost" },
 	{ key = "SUPER + V", name = "Jitsi_Meet", title = "Jitsi Meet" },
-	{ key = "SUPER + Y", name = "YouTube_Music", title = "YouTube Music" },
 	{ key = "SUPER + I", name = "Zoho_Mail", title = "Zoho Mail" },
 	-- AI Studio (two Brave profiles)
 	{
@@ -209,4 +359,28 @@ end
 hl.bind("SUPER + ALT + F", function()
 	toggle_scratchpad("Figma", "figma-linux")
 	redraw_scratchpad_after("figma-linux", { size = { 3560, 2060 }, center = true }, 500)
+end)
+
+-- YouTube Music (Brave PWA) -- same reshape-after-map problem as Figma: Brave
+-- restores the PWA's last-remembered geometry (often larger than the screen)
+-- shortly after it maps, clobbering the static size+center rule in
+-- custom/rules.lua. UNLIKE Figma we redraw ONLY on a COLD launch (app not
+-- running anywhere yet): once it has opened we leave it alone, so the user's
+-- own resize/move survives subsequent show/hide toggles. (Cold launch is
+-- detected with the same scratchpad_running() helper toggle_scratchpad uses.)
+-- Size is computed monitor-relative (the rule used "40%"/"60%") so it tracks
+-- resolution / multi-monitor instead of hard-coding pixels.
+hl.bind("SUPER + Y", function()
+	local cold = not scratchpad_running("YouTube Music")
+	toggle_scratchpad("YouTube_Music", "YouTube Music")
+	if not cold then
+		return -- warm toggle: preserve the user's manual geometry
+	end
+	local m = hl.get_active_monitor()
+	if m then
+		redraw_scratchpad_after("YouTube Music", {
+			size = { math.floor(m.width * 0.40), math.floor(m.height * 0.60) },
+			center = true,
+		}, 500)
+	end
 end)
