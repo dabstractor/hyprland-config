@@ -201,8 +201,44 @@ hl.bind("SUPER + SHIFT + L", hl.dsp.window.move({ workspace = "+1" }))
 hl.bind("SUPER + SHIFT + J", hl.dsp.window.move({ workspace = "+5" }))
 hl.bind("SUPER + SHIFT + K", hl.dsp.window.move({ workspace = "-5" }))
 
-hl.bind("SUPER + SHIFT + mouse_down", hl.dsp.window.move({ workspace = "-1" }))
-hl.bind("SUPER + SHIFT + mouse_up", hl.dsp.window.move({ workspace = "+1" }))
+-- Scroll-wheel window carrying (SUPER+SHIFT+wheel) is debounced rather than
+-- dispatched per tick. Each `movetoworkspace`+follow (window.move above) is a
+-- heavy operation: it relocates the window, relayouts, follows onto the target,
+-- and replays the workspaces-slide + window-popin animations. Unlike a plain
+-- `focus`, those can't be interrupted cleanly mid-flight, so a fast scroll
+-- visibly "loads" every intermediate workspace one by one. scroll_event_delay=0
+-- fixed plain focus by killing the input throttle, but movetoworkspace's own
+-- per-dispatch cost still serializes. Accumulating the signed delta and firing
+-- ONE movetoworkspace `±N` shortly after scrolling settles makes the window land
+-- exactly N workspaces away in a single transition. Keyboard sends
+-- (SHIFT+H/L/J/K above) stay direct since they're discrete presses, not bursts.
+local CARRY_SETTLE_MS = 30
+local carry_accumulator = 0
+local carry_timer = nil
+
+local function carry_flush()
+	carry_timer = nil
+	local total = carry_accumulator
+	carry_accumulator = 0
+	if total ~= 0 then
+		hl.dispatch(hl.dsp.window.move({ workspace = (total >= 0 and "+" or "") .. total }))
+	end
+end
+
+local function carry_window(delta)
+	carry_accumulator = carry_accumulator + delta
+	if carry_timer then
+		carry_timer:set_enabled(false)
+	end
+	carry_timer = hl.timer(carry_flush, { timeout = CARRY_SETTLE_MS, type = "oneshot" })
+end
+
+hl.bind("SUPER + SHIFT + mouse_down", function()
+	carry_window(-1)
+end)
+hl.bind("SUPER + SHIFT + mouse_up", function()
+	carry_window(1)
+end)
 
 -- Move focus
 hl.bind("CTRL + SUPER + H", hl.dsp.focus({ direction = "left" }))
