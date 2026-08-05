@@ -397,3 +397,8 @@ hl.bind(
 	hl.dsp.global("quickshell:overviewWorkspacesToggle"),
 	{ description = "Shell: Toggle overview" }
 )
+
+-- Window-leader mode (SUPER+W -> encoder resize, mirroring neovim's <C-w>).
+-- Loaded last and guarded by pcall so an error in winmode.lua can never take
+-- the rest of these custom binds down with it.
+pcall(require, "custom.winmode")

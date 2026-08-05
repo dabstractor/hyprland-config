@@ -313,7 +313,8 @@ end)
 -- free.
 local scratchpads = {
 	-- VM viewer: Looking Glass -> qmk-win (see hyprscratch.conf)
-	{ key = "ALT + SUPER + W", name = "Looking_Glass", title = "looking-glass-client" },
+	-- Moved off ALT+SUPER+W (now the winmode swap leader). Super+R is free.
+	{ key = "SUPER + R", name = "Looking_Glass", title = "looking-glass-client" },
 	-- System monitor
 	{ key = "SUPER + b", name = "btop", title = "btop" },
 	-- Calculator (two keys -> same toggle)
