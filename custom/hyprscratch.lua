@@ -5,7 +5,10 @@
 -- Focus model: the floating terminal scratchpad is protected by a NAMED no_initial_focus rule ("term-focus-guard", defined in custom/rules.lua) that is ARMED only while the terminal is visible, so ordinary windows opening beneath it don't steal focus. Every OTHER scratchpad must grab focus the moment it opens. toggle_scratchpad() reconciles the two -- see its comment for how. Is the floating terminal scratchpad currently shown on a normal workspace? (hyprscratch parks a hidden scratchpad on a special workspace.) This is also the condition that arms term-focus-guard, so it doubles as the guard's intended state.
 local function terminal_visible()
 	for _, w in ipairs(hl.get_windows()) do
-		if w.title == "terminal" and w.mapped and w.workspace and not w.workspace.special and w.workspace.id > 0 then
+		-- Match the stable creation-time initialTitle, NOT the current title: the
+		-- terminal's title is now dynamic ("terminal - <app>", driven by tmux
+		-- set-titles), so the live title changes while the guard must still arm.
+		if w.initial_title == "terminal" and w.mapped and w.workspace and not w.workspace.special and w.workspace.id > 0 then
 			return true
 		end
 	end

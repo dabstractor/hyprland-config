@@ -9,9 +9,10 @@
 ----------------------------------------------------------------------
 
 -- The locked terminal scratchpad is launched with --title "terminal"; it is
--- immune to move/resize. initialTitle is what Hyprland sets at map time.
+-- immune to move/resize. Match the stable initialTitle, not the live title
+-- (which is now dynamic: "terminal - <app>", driven by tmux set-titles).
 local function is_locked_terminal(win)
-	return win ~= nil and (win.initial_title == "terminal" or win.title == "terminal")
+	return win ~= nil and win.initial_title == "terminal"
 end
 
 -- Resize active window by a relative delta; skip the locked terminal.
