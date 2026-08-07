@@ -8,7 +8,13 @@ local function terminal_visible()
 		-- Match the stable creation-time initialTitle, NOT the current title: the
 		-- terminal's title is now dynamic ("terminal - <app>", driven by tmux
 		-- set-titles), so the live title changes while the guard must still arm.
-		if w.initial_title == "terminal" and w.mapped and w.workspace and not w.workspace.special and w.workspace.id > 0 then
+		if
+			w.initial_title == "terminal"
+			and w.mapped
+			and w.workspace
+			and not w.workspace.special
+			and w.workspace.id > 0
+		then
 			return true
 		end
 	end

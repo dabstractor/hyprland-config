@@ -7,8 +7,11 @@
 --     CTRL + SUPER + W     -> FOCUS    (focus window up/down/left/right)
 --     SHIFT + SUPER + W    -> CARRY    (move window across workspaces: up/right = next, down/left = prev)
 --
--- In RESIZE mode , / . also resize horizontally (keyboard). Exit any mode with
--- Escape, by re-pressing the same leader, or after MODE_IDLE_MS of inactivity.
+-- In RESIZE mode , / . also resize horizontally (keyboard). Each mode auto-exits
+-- MODE_TIMEOUT_MS after the LAST action -- entering, every encoder tick, and ,
+-- / . all reset the timer, so it only fires once you've been idle for the full
+-- duration. You can also exit with Escape or by re-pressing the same leader;
+-- pressing a different leader switches modes and restarts the timer.
 --
 -- WHY A LUA FLAG, NOT A SUBMAP: Hyprland 0.55 has a bug where mouse/wheel binds
 -- do not fire inside a non-default submap (hyprwm/Hyprland #14917, #15058,
@@ -26,7 +29,7 @@
 
 local STEP = 40 -- px per encoder tick for RESIZE; matches SUPER+ALT(+SHIFT)+wheel binds in custom/keybinds.lua
 local MOVE_STEP = 40 -- px per encoder tick for floating MOVE (swap mode)
-local MODE_IDLE_MS = 2000 -- auto-exit a mode after this much inactivity (mirrors neovim's resize_mode_timer; tunable)
+local MODE_TIMEOUT_MS = 500 -- auto-exit after this much INACTIVITY (entry + every action reset it)
 local CARRY_SETTLE_MS = 30 -- debounce window for workspace-carry (movetoworkspace serializes on rapid ticks)
 
 -- The locked terminal scratchpad (launched with --title "terminal") is immune
@@ -60,7 +63,9 @@ end
 -- Debounced workspace carry: accumulate signed ticks while the encoder spins,
 -- then fire ONE movetoworkspace ±N shortly after it settles. (Copied from the
 -- SUPER+SHIFT+wheel carry in custom/keybinds.lua; movetoworkspace is a heavy,
--- non-interruptible op, so per-tick dispatch visibly "loads" every workspace.)
+-- non-interruptible op, so per-tick dispatch visibly "loads" every workspace.
+-- The carry flush is independent of the mode timer, so it still lands even if
+-- the mode hard-exits mid-spin.)
 local carry_accumulator = 0
 local carry_timer = nil
 
@@ -81,37 +86,36 @@ local function carry_window(delta)
 	carry_timer = hl.timer(carry_flush, { timeout = CARRY_SETTLE_MS, type = "oneshot" })
 end
 
--- ---- mode state + idle auto-exit timer ----
+-- ---- mode state + hard auto-exit timer ----
 local current_mode = "" -- "", "resize", "swap", "focus", "carry"
-local idle_timer = nil
+local mode_timer = nil
 
-local function disarm_idle()
-	if idle_timer then
-		idle_timer:set_enabled(false)
-		idle_timer = nil
+local function disarm_timer()
+	if mode_timer then
+		mode_timer:set_enabled(false)
+		mode_timer = nil
 	end
 end
 
-local function rearm_idle()
-	disarm_idle()
-	idle_timer = hl.timer(function()
-		current_mode = ""
-	end, { timeout = MODE_IDLE_MS, type = "oneshot" })
-end
-
 local function exit_mode()
-	disarm_idle()
+	disarm_timer()
 	current_mode = ""
 end
 
+-- Arm (or re-arm) the hard timeout. Called on entry and on switching modes.
+local function arm_timeout()
+	disarm_timer()
+	mode_timer = hl.timer(exit_mode, { timeout = MODE_TIMEOUT_MS, type = "oneshot" })
+end
+
 -- Pressing a leader toggles its mode: re-pressing the same leader exits;
--- pressing a different leader switches to it.
+-- pressing a different leader switches to it (and restarts the timer).
 local function set_mode(name)
 	if current_mode == name then
 		exit_mode()
 	else
 		current_mode = name
-		rearm_idle()
+		arm_timeout()
 	end
 end
 
@@ -150,7 +154,7 @@ local function handle_wheel(which)
 			carry_window(-1)
 		end
 	end
-	rearm_idle()
+	arm_timeout() -- reset the idle timer on every action
 end
 
 -- ---- the four leaders (default submap) ----
@@ -185,13 +189,13 @@ end, { non_consuming = true })
 hl.bind("comma", function()
 	if current_mode == "resize" then
 		resize_if_ok(-STEP, 0)
-		rearm_idle()
+		arm_timeout()
 	end
 end, { repeating = true, non_consuming = true })
 hl.bind("period", function()
 	if current_mode == "resize" then
 		resize_if_ok(STEP, 0)
-		rearm_idle()
+		arm_timeout()
 	end
 end, { repeating = true, non_consuming = true })
 
