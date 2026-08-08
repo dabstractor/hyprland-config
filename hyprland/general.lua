@@ -154,7 +154,7 @@ hl.curve("stall", {
 hl.animation({
 	leaf = "windowsIn",
 	enabled = true,
-	speed = 3,
+	speed = 1.5,
 	bezier = "emphasizedDecel",
 	style = "popin 80%",
 })
@@ -167,7 +167,7 @@ hl.animation({
 hl.animation({
 	leaf = "windowsOut",
 	enabled = true,
-	speed = 2,
+	speed = 1.5,
 	bezier = "emphasizedDecel",
 	style = "popin 90%",
 })

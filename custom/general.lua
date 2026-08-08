@@ -87,3 +87,16 @@ hl.config({
 		scroll_event_delay = 0,
 	},
 })
+
+-- Workspace-switch animation: snappier (7 ds / 700 ms -> 2 ds / 200 ms).
+-- Hypothesis (matches Hyprland #7789 / fix #9629): positioning a window while a
+-- workspace slide is still animating can land it ~40px off on NVIDIA. A shorter
+-- switch shrinks that overlap window. Lower speed (ds) = snappier; set
+-- enabled = false for an instant cut.
+hl.animation({
+	leaf = "workspaces",
+	enabled = true,
+	speed = 4,
+	bezier = "menu_decel",
+	style = "slide",
+})
