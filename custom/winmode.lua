@@ -29,7 +29,7 @@
 
 local STEP = 40 -- px per encoder tick for RESIZE; matches SUPER+ALT(+SHIFT)+wheel binds in custom/keybinds.lua
 local MOVE_STEP = 40 -- px per encoder tick for floating MOVE (swap mode)
-local MODE_TIMEOUT_MS = 500 -- auto-exit after this much INACTIVITY (entry + every action reset it)
+local MODE_TIMEOUT_MS = 1000 -- auto-exit after this much INACTIVITY (entry + every action reset it)
 local CARRY_SETTLE_MS = 30 -- debounce window for workspace-carry (movetoworkspace serializes on rapid ticks)
 
 -- The locked terminal scratchpad (launched with --title "terminal") is immune
@@ -97,12 +97,38 @@ local function disarm_timer()
 	end
 end
 
-local function exit_mode()
-	disarm_timer()
-	current_mode = ""
+-- Keep the quickshell bar + workspace NUMBERS shown while carry mode is active.
+-- The Shift+Super+W chord releases Super, which clears superDown and would hide
+-- the bar, so we re-fire the "hold Super" global on a repeating timer for the
+-- whole time carry is on. (Hiding on exit is handled separately / TODO.)
+local KEEPALIVE_MS = 150
+local keepalive_timer = nil
+
+local function sync_carry_overlay(prev, new)
+	if new == "carry" and prev ~= "carry" then
+		if not keepalive_timer then
+			keepalive_timer = hl.timer(function()
+				hl.dispatch(hl.dsp.global("quickshell:workspaceNumber"))
+			end, { timeout = KEEPALIVE_MS, type = "repeat" })
+		else
+			keepalive_timer:set_enabled(true)
+		end
+	elseif prev == "carry" and new ~= "carry" then
+		if keepalive_timer then
+			keepalive_timer:set_enabled(false)
+		end
+		hl.exec_cmd("qs -c $qsConfig ipc call workspaceNumbers hide")
+	end
 end
 
--- Arm (or re-arm) the hard timeout. Called on entry and on switching modes.
+local function exit_mode()
+	local prev = current_mode
+	disarm_timer()
+	current_mode = ""
+	sync_carry_overlay(prev, current_mode)
+end
+
+-- Arm (or re-arm) the idle timeout. Called on entry and on switching modes.
 local function arm_timeout()
 	disarm_timer()
 	mode_timer = hl.timer(exit_mode, { timeout = MODE_TIMEOUT_MS, type = "oneshot" })
@@ -111,12 +137,15 @@ end
 -- Pressing a leader toggles its mode: re-pressing the same leader exits;
 -- pressing a different leader switches to it (and restarts the timer).
 local function set_mode(name)
+	local prev = current_mode
 	if current_mode == name then
-		exit_mode()
+		disarm_timer()
+		current_mode = ""
 	else
 		current_mode = name
 		arm_timeout()
 	end
+	sync_carry_overlay(prev, current_mode)
 end
 
 -- Dispatch one wheel event ("up"/"down"/"left"/"right") based on the active
@@ -148,9 +177,9 @@ local function handle_wheel(which)
 	elseif current_mode == "focus" then
 		hl.dispatch(hl.dsp.focus({ direction = which }))
 	elseif current_mode == "carry" then
-		if which == "up" or which == "right" then
+		if which == "down" or which == "right" then
 			carry_window(1)
-		elseif which == "down" or which == "left" then
+		elseif which == "up" or which == "left" then
 			carry_window(-1)
 		end
 	end
