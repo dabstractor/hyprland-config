@@ -1,40 +1,43 @@
 ---@module 'hl'
 
--- GPU selection: the Intel iGPU (00:02.0) is passed through to the qmk-win VM
--- (vfio-pci), so it's gone from host DRM and the RTX 3080 Ti (01:00.0) is the
--- only host GPU -> currently /dev/dri/card1 (it was card2 while the iGPU was
--- card1). The card number can shift if you revert passthrough or add/remove a
--- GPU, so resolve the stable by-path symlink at config-load time instead of
--- hard-coding it. (Check `ls -l /dev/dri/by-path/` if Hyprland won't start;
--- with a single host GPU you may also just delete this block and let Hyprland
--- auto-pick.)
-local rtx_link = "/dev/dri/by-path/pci-0000:01:00.0-card"
-local rtx_card
+-- ThinkPad T570: muxless Optimus. The eDP panel is wired to the Intel HD 620
+-- iGPU (00:02.0 -> /dev/dri/by-path/pci-0000:00:02.0-card); the 940MX dGPU
+-- (02:00.0) has no display scanout here and is only for PRIME render offload
+-- (`prime-run <app>`).
+--
+-- Pin the compositor to the Intel iGPU explicitly. With nvidia-drm loaded
+-- (modeset=1) the dGPU also registers a DRM node but has no connectors on this
+-- muxless panel, so letting Aquamarine auto-pick can grab the wrong device.
+-- (Desktop branch pins pci-0000:01:00.0-card instead — keep these per-host.)
+-- AQ_DRM_DEVICES is ':'-separated, but the by-path symlink itself contains
+-- ':' (pci-0000:00:02.0-card), so it MUST be resolved to the plain /dev/dri/cardN
+-- first -- otherwise Aquamarine splits the path on the colons and reports
+-- "no gpus to use". (Desktop branch resolves the RTX symlink the same way.)
+local igpu = "/dev/dri/card1"
 do
-	local pipe = io.popen("readlink -f " .. rtx_link)
-	if pipe then
-		rtx_card = pipe:read("*l")
-		pipe:close()
+	local p = io.popen("readlink -f /dev/dri/by-path/pci-0000:00:02.0-card")
+	if p then
+		local r = p:read("*l")
+		p:close()
+		if r and r ~= "" then igpu = r end
 	end
 end
--- Fall back to the last-known card if readlink fails or the symlink is gone.
-rtx_card = (rtx_card and rtx_card ~= "") and rtx_card or "/dev/dri/card1"
-hl.env("AQ_DRM_DEVICES", rtx_card)
+hl.env("AQ_DRM_DEVICES", igpu)
 
 -- https://wiki.hyprland.org/Configuring/Environment-variables/
 
+-- Keep these OFF globally: setting them would route every GL/VAAPI client onto
+-- the dGPU (a PRIME copy that wastes power). For per-app offload, `prime-run`
+-- sets these for that one process only.
 -- env = LIBVA_DRIVER_NAME,nvidia
--- env = __GLX_VENDOR_LIBRARY_NAME, nvidia
+-- env = __GLX_VENDOR_LIBRARY_NAME,nvidia
 
 hl.config({
 	debug = {
 		disable_logs = false,
-		-- Mode 2 (default) = per-pixel damage tracking. On NVIDIA it produces
-		-- false negatives: a translucent/blurred window over a fast-updating
-		-- (hardware-accelerated) surface stops getting repainted and shows
-		-- stale/corrupted contents until a full repaint (e.g. workspace switch).
-		-- Mode 1 = repaint the whole monitor whenever anything is damaged;
-		-- trades a little GPU for correctness. (0 = full repaint every frame.)
-		damage_tracking = 1,
+		enable_stdout_logs = true,
+		-- damage_tracking left at default (2) — that NVIDIA workaround only
+		-- applies when the compositor itself renders on NVIDIA, which it does
+		-- not on this host (Intel iGPU does).
 	},
 })

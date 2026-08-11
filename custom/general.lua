@@ -8,6 +8,16 @@
 -- Here's a list of every variable: https://wiki.hyprland.org/Configuring/Variables/
 -- (custom/env.lua is already required by hyprland.lua before this file)
 
+-- eDP-1 is a 15" 4K (3840x2160) panel -> scale 2x. The base
+-- hyprland/general.lua sets a wildcard monitor at scale 1; this named rule
+-- overrides it for eDP-1 (named outputs win over the "" wildcard).
+hl.monitor({
+	output = "eDP-1",
+	mode = "preferred",
+	position = "auto",
+	scale = 2,
+})
+
 hl.config({
 	general = {
 		gaps_in = 3,
@@ -21,9 +31,9 @@ hl.config({
 hl.config({
 	decoration = {
 		rounding = 8,
-		blur = {
-			new_optimizations = false, -- disable blur caching; always re-sample background (NVIDIA damage-tracking workaround)
-		},
+		-- blur.new_optimizations left at default (true). The NVIDIA blur-caching
+		-- workaround it used to disable only matters when the compositor renders
+		-- on NVIDIA; on the ThinkPad the Intel iGPU composites, so caching is fine.
 	},
 })
 
@@ -99,4 +109,12 @@ hl.animation({
 	speed = 4,
 	bezier = "menu_decel",
 	style = "slide",
+})
+
+hl.config({
+	decoration = {
+		shadow = {
+			render_power = 1,
+		},
+	},
 })
