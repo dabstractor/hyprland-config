@@ -3,7 +3,7 @@ hl.monitor({
 	output = "",
 	mode = "preferred",
 	position = "auto",
-	scale = 1,
+	scale = 2,
 })
 
 hl.gesture({
@@ -295,9 +295,5 @@ hl.config({
 		zoom_rigid = false,
 		zoom_disable_aa = true,
 		hotspot_padding = 1,
-	},
-
-	xwayland = {
-		force_zero_scaling = true,
 	},
 })
