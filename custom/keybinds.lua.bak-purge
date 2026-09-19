@@ -398,20 +398,7 @@ hl.bind(
 	{ description = "Shell: Toggle overview" }
 )
 
-----------------------------------------------------------------------
--- whisparr-purge: delete the title VLC is currently playing (muted
--- headless script; see ~/.local/bin/whisparr-purge)
-----------------------------------------------------------------------
--- whisparr-purge v2: two-press confirmed delete of what the FOCUSED
--- (or only-playing) VLC instance is playing. Stages to trash, restorable 7d.
-hl.bind("SUPER + SHIFT + D", hl.dsp.exec_cmd("/home/dustin/.local/bin/whisparr-purge"))
-
 -- Window-leader mode (SUPER+W -> encoder resize, mirroring neovim's <C-w>).
 -- Loaded last and guarded by pcall so an error in winmode.lua can never take
 -- the rest of these custom binds down with it.
-
--- Screenshots / OCR / recording (quickshell-free; see custom/capture.lua).
--- Guarded by pcall for the same reason as winmode above.
-pcall(require, "custom.capture")
-
 pcall(require, "custom.winmode")

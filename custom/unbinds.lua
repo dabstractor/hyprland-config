@@ -219,4 +219,29 @@ hl.unbind("SUPER + P")
 
 hl.unbind("SUPER + Semicolon")
 
+----------------------------------------------------------------------
+-- Capture pipeline reclamation (hyprland/keybinds.lua): all qs-coupled
+-- screenshot/OCR/translate/record binds + the old grim-based Print binds
+-- are freed here so custom/capture.lua (required from custom/keybinds.lua)
+-- can rebind them with hyprshot/wf-recorder. NOTE: several of these keys
+-- carry TWO binds each (a quickshell global-shortcut bind plus an exec
+-- fallback), so each unbind appears twice.
+----------------------------------------------------------------------
+hl.unbind("SUPER + SHIFT + S")
+hl.unbind("SUPER + SHIFT + S")
+hl.unbind("SUPER + SHIFT + A")
+hl.unbind("SUPER + SHIFT + A")
+hl.unbind("SUPER + SHIFT + X")
+hl.unbind("SUPER + SHIFT + X")
+hl.unbind("SUPER + SHIFT + T")
+hl.unbind("SUPER + SHIFT + R")
+hl.unbind("SUPER + SHIFT + R")
+hl.unbind("SUPER + ALT + R")
+hl.unbind("SUPER + ALT + R")
+hl.unbind("CTRL + ALT + R")
+hl.unbind("SUPER + SHIFT + ALT + R")
+hl.unbind("Print")
+hl.unbind("CTRL + Print")
+hl.unbind("CTRL + Print")
+
 -- splitratio -> freed for hyprscratch obsidian vault

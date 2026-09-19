@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+
+#
+# wayle
+#
+# Stable launcher for the wayle desktop shell. Every Hyprland bind and
+# systemd user unit calls THIS path, so the trial install can become the
+# system install at cutover without touching a single bind (RESPONSIBILITIES
+# boundary note 5).
+#
+# Resolution order — first found wins:
+#   1. $WAYLE_BIN                 explicit override (dev / pinned builds)
+#   2. ~/.local/lib/wayle-pinned/wayle
+#                                pinned patched build (RUNG B: elastic pill
+#                                + unbounded icons; LOG 2026-09-18 14:24/
+#                                16:2x). Deliberately ABOVE /usr/bin so the
+#                                patched features survive cutover; rollback
+#                                = remove the directory.
+#   3. /usr/bin/wayle             system install (`yay -S wayle-bin` at cutover)
+#   4. /tmp/wayle-bin-root/wayle  trial bootstrap wrapper (sets XDG_DATA_DIRS
+#                                for the user-local pkg extract; /tmp is wiped
+#                                on reboot — the SELF-HEAL block below
+#                                re-extracts it from the yay cache so reboots
+#                                cannot break the launch chain)
+#
+# Usage:
+#   wayle <command> [args...]    (panel start|stop|restart, shell, config, ...)
+#
+set -euo pipefail
+
+if [ -n "${WAYLE_BIN:-}" ] && [ -x "${WAYLE_BIN}" ]; then
+    exec "${WAYLE_BIN}" "$@"
+fi
+
+PINNED="$HOME/.local/lib/wayle-pinned/wayle"
+if [ -x "$PINNED" ]; then
+    exec "$PINNED" "$@"
+fi
+
+if [ -x /usr/bin/wayle ]; then
+    exec /usr/bin/wayle "$@"
+fi
+
+# ---------------------------------------------------------------------------
+# /tmp SELF-HEAL (user directive 2026-09-18 13:35, incident-2 aftermath; see
+# .swarm/LOG.md 13:35 + this repo's hypr-custom/README.md). Reboots wipe
+# /tmp/wayle-bin-root (the yay-cached user-local trial extract). When it is
+# missing, rebuild it from ~/.cache/yay/wayle-bin/*.pkg.tar.zst (the
+# stack-preparer's original procedure: prefix-extract the pkg + regenerate
+# the inner bootstrap wrapper). FAST-FAIL is a hard requirement — the
+# autohide daemon calls this wrapper with a 3 s timeout for exclusive
+# flips — so every wait below is bounded and a missing cache errors out
+# IMMEDIATELY (never hangs, never loops).
+# Script-smith edit in hypr-integrator's file area per the 13:35 sanction.
+# ---------------------------------------------------------------------------
+TMP_ROOT=/tmp/wayle-bin-root
+TMP_INNER="$TMP_ROOT/wayle"
+TMP_BIN="$TMP_ROOT/usr/bin/wayle"
+YAY_GLOB="$HOME/.cache/yay/wayle-bin/wayle-bin-[0-9]*.pkg.tar.zst"  # no *debug*
+
+write_inner_wrapper() {
+    cat > "$TMP_INNER" <<'INNER'
+#!/usr/bin/env bash
+# Trial-install bootstrap wrapper (auto-recreated by the stable wrapper's
+# /tmp self-heal — reboots wipe /tmp; .swarm/LOG.md 2026-09-18 13:35).
+ROOT=/tmp/wayle-bin-root
+export XDG_DATA_DIRS="$ROOT/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+exec "$ROOT/usr/bin/wayle" "$@"
+INNER
+    chmod +x "$TMP_INNER"
+}
+
+if [ ! -x "$TMP_INNER" ] || [ ! -x "$TMP_BIN" ]; then
+    LOCK=/tmp/.wayle-bin-root.lock
+    # stale-lock sweep: a crashed rebuilder must not wedge later callers
+    if [ -d "$LOCK" ] && [ -n "$(find "$LOCK" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
+        rmdir "$LOCK" 2>/dev/null || true
+    fi
+    if mkdir "$LOCK" 2>/dev/null; then
+        # we are the rebuilder
+        ok=0
+        # shellcheck disable=SC2012  # ls -t: newest cached pkg first
+        pkg=$(ls -t $YAY_GLOB 2>/dev/null | head -n 1 || true)
+        if [ -n "$pkg" ]; then
+            mkdir -p "$TMP_ROOT"
+            if timeout 8 tar --zstd -xf "$pkg" -C "$TMP_ROOT" 2>/dev/null \
+               && [ -x "$TMP_BIN" ]; then
+                write_inner_wrapper
+                ok=1
+            fi
+        fi
+        rmdir "$LOCK" 2>/dev/null || true
+        if [ "$ok" != 1 ]; then
+            echo "wayle: /tmp trial install is missing and could not be rebuilt from the yay cache." >&2
+            echo "wayle: run  yay -S wayle-bin  for the proper system install (pkg already cached — takes seconds)." >&2
+            exit 1
+        fi
+    else
+        # someone else is rebuilding — wait for it, BOUNDED (2 s), never hang
+        waited=0
+        while [ "$waited" -lt 40 ] && { [ ! -x "$TMP_INNER" ] || [ ! -x "$TMP_BIN" ]; }; do
+            sleep 0.05
+            waited=$((waited + 1))
+        done
+        [ -x "$TMP_BIN" ] || { echo "wayle: /tmp trial install rebuild did not finish in time" >&2; exit 1; }
+        [ -x "$TMP_INNER" ] || write_inner_wrapper
+    fi
+fi
+
+if [ -x "$TMP_INNER" ]; then
+    exec "$TMP_INNER" "$@"
+fi
+
+echo "wayle: no binary found — tried \$WAYLE_BIN, ~/.local/lib/wayle-pinned/wayle, /usr/bin/wayle, /tmp/wayle-bin-root/wayle" >&2
+exit 1
