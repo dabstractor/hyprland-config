@@ -95,6 +95,10 @@ hl.unbind("SUPER + code:82")
 
 hl.unbind("SUPER + code:86")
 
+-- Reclaim SUPER+ALT+Equal from the end4 'Testing' notify-send bind; the pair
+-- is re-bound to cursor zoom in custom/keybinds.lua.
+hl.unbind("SUPER + ALT + Equal")
+
 hl.unbind("SUPER+ALT + A")
 
 hl.unbind("SUPER + SUPER_L")

@@ -351,9 +351,26 @@ hl.bind("CTRL + SUPER + Period", function()
 	move_if_ok(8, 0)
 end, { locked = true, repeating = true })
 
--- Show/Hide bar (ags)
-hl.bind("ALT + SUPER + Z", hl.dsp.exec_cmd("agsv1 run-js 'toggleBarVisibility();'"))
-hl.bind("SUPER + Z", hl.dsp.exec_cmd("agsv1 run-js 'toggleCurrentWorkspaceBarVisibility();'"))
+-- Cursor zoom (screen magnifier centered on the cursor; zoom_rigid = false so
+-- the magnified region tracks the cursor). The end4 default SUPER+-/= zoom
+-- binds were reclaimed above for resize; these replace them. zoomfunction is
+-- local to hyprland/keybinds.lua, so re-declare it here.
+local function zoomfunction(value)
+	local zoomvalue = hl.get_config("cursor:zoom_factor")
+	if (zoomvalue + value) > 3.0 then
+		hl.config({ cursor = { zoom_factor = 3.0 } })
+	elseif (zoomvalue + value) < 1.0 then
+		hl.config({ cursor = { zoom_factor = 1.0 } })
+	else
+		hl.config({ cursor = { zoom_factor = zoomvalue + value } })
+	end
+end
+hl.bind("SUPER + ALT + Minus", function()
+	zoomfunction(-0.3)
+end, { repeating = true, description = "Screen: Zoom out" })
+hl.bind("SUPER + ALT + Equal", function()
+	zoomfunction(0.3)
+end, { repeating = true, description = "Screen: Zoom in" })
 
 -- Launcher
 hl.bind("SUPER + Space", hl.dsp.exec_cmd("vicinae toggle"))
