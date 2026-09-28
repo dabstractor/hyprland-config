@@ -199,6 +199,8 @@ hl.bind("SUPER + J", hl.dsp.focus({ workspace = "+5" }))
 
 hl.bind("SUPER + mouse_up", hl.dsp.focus({ workspace = "-1" }))
 hl.bind("SUPER + mouse_down", hl.dsp.focus({ workspace = "+1" }))
+hl.bind("SUPER + mouse_left", hl.dsp.focus({ workspace = "-1" }))
+hl.bind("SUPER + mouse_right", hl.dsp.focus({ workspace = "+1" }))
 hl.bind("SUPER + down", hl.dsp.focus({ workspace = "+1" }))
 hl.bind("SUPER + up", hl.dsp.focus({ workspace = "-1" }))
 
@@ -259,7 +261,7 @@ hl.bind("CTRL + SUPER + J", hl.dsp.focus({ direction = "down" }))
 
 -- Cycle windows (history-based, like Alt+Tab)
 hl.bind("SUPER + Tab", hl.dsp.window.cycle_next())
-hl.bind("SUPER + SHIFT + Tab", hl.dsp.window.cycle_next({ prev = true }))
+hl.bind("SUPER + SHIFT + Tab", hl.dsp.window.cycle_next({ next = false }))
 
 -- Move windows (tiled) / Focus windows (floating)
 hl.bind("CTRL + SUPER + mouse_down", function()
@@ -297,8 +299,8 @@ hl.bind("CTRL + ALT + SUPER + K", hl.dsp.window.swap({ direction = "up" }))
 hl.bind("CTRL + ALT + SUPER + J", hl.dsp.window.swap({ direction = "down" }))
 hl.bind("CTRL + ALT + SUPER + mouse_down", hl.dsp.window.swap({ direction = "right" }))
 hl.bind("CTRL + ALT + SUPER + mouse_up", hl.dsp.window.swap({ direction = "left" }))
-hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_down", hl.dsp.window.swap({ direction = "up" }))
-hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_up", hl.dsp.window.swap({ direction = "down" }))
+hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_down", hl.dsp.window.swap({ direction = "down" }))
+hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_up", hl.dsp.window.swap({ direction = "up" }))
 
 -- Overdrive volume controls
 hl.bind(
