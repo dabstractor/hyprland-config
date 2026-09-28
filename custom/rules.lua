@@ -183,7 +183,13 @@ do
 	for _, w in ipairs(hl.get_windows()) do
 		-- Match the stable initialTitle, not the live title (now dynamic: see
 		-- custom/hyprscratch.lua). Keeps the guard in the right state across reloads.
-		if w.initial_title == "terminal" and w.mapped and w.workspace and not w.workspace.special and w.workspace.id > 0 then
+		if
+			w.initial_title == "terminal"
+			and w.mapped
+			and w.workspace
+			and not w.workspace.special
+			and w.workspace.id > 0
+		then
 			term_visible = true
 			break
 		end
