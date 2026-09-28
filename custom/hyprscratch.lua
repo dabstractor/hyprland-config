@@ -168,10 +168,9 @@ end)
 -- used only to tell a cold launch from a warm toggle. Add new scratchpads here
 -- (and define them in hyprscratch.conf) -- they pick up the focus behavior for
 -- free.
+-- Looking Glass (qmk-win VM viewer) is bound separately below -- it needs to
+-- ensure the VM is running first, so it can't ride the generic toggle loop.
 local scratchpads = {
-	-- VM viewer: Looking Glass -> qmk-win (see hyprscratch.conf)
-	-- Moved off ALT+SUPER+W (now the winmode swap leader). Super+R is free.
-	{ key = "SUPER + R", name = "Looking_Glass", title = "looking-glass-client" },
 	-- System monitor
 	{ key = "SUPER + b", name = "btop", title = "btop" },
 	-- Calculator (two keys -> same toggle)
@@ -210,6 +209,18 @@ for _, sp in ipairs(scratchpads) do
 		toggle_scratchpad(name, title)
 	end)
 end
+
+-- Looking Glass (qmk-win VM viewer). Needs the qmk-win libvirt domain running
+-- before there's anything for LG to attach to, so it has its own bind instead
+-- of the generic loop: fire-and-forget `ensure-qmk-win.sh` (starts the VM only
+-- if it's "shut off" -- passwordless via /etc/sudoers.d/qmk-win), THEN toggle
+-- the scratchpad. We don't block on the boot: a Windows VM takes a while to
+-- come up, and Looking Glass (option: persist) keeps retrying its IVSHMEM
+-- connection and latches on once the VM finishes booting.
+hl.bind("SUPER + R", function()
+	hl.exec_cmd(os.getenv("HOME") .. "/.config/hypr/custom/scripts/ensure-qmk-win.sh")
+	toggle_scratchpad("Looking_Glass", "looking-glass-client")
+end)
 
 -- Figma -- Electron reshapes the window after it maps, clobbering the
 -- size+center hyprscratch applies at show time (it piles into the bottom-right
