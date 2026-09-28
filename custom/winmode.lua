@@ -43,6 +43,12 @@ local function resize_if_ok(dx, dy)
 	if is_locked_terminal(w) then
 		return
 	end
+	-- Clamp against sub-zero sizes (Hyprland doesn't guard resizeactive).
+	if w ~= nil then
+		local cur_x, cur_y = w.size.x, w.size.y
+		if dx < 0 and cur_x + dx < 0 then dx = -cur_x end
+		if dy < 0 and cur_y + dy < 0 then dy = -cur_y end
+	end
 	hl.dispatch(hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
 end
 
@@ -156,9 +162,9 @@ local function handle_wheel(which)
 	end
 	if current_mode == "resize" then
 		if which == "up" then
-			resize_if_ok(0, STEP)
-		elseif which == "down" then
 			resize_if_ok(0, -STEP)
+		elseif which == "down" then
+			resize_if_ok(0, STEP)
 		elseif which == "right" then
 			resize_if_ok(STEP, 0)
 		elseif which == "left" then

@@ -16,11 +16,21 @@ local function is_locked_terminal(win)
 end
 
 -- Resize active window by a relative delta; skip the locked terminal.
--- (Was: tiledorfloating.sh "resizeactive Dx Dy" "resizeactive Dx Dy".)
+-- Also clamps against sub-zero sizes (Hyprland doesn't guard against
+-- resizeactive driving a window below 0 px).
 local function resize_if_ok(dx, dy)
 	local w = hl.get_active_window()
 	if is_locked_terminal(w) then
 		return
+	end
+	if w ~= nil then
+		local cur_x, cur_y = w.size.x, w.size.y
+		if dx < 0 and cur_x + dx < 0 then
+			dx = -cur_x
+		end
+		if dy < 0 and cur_y + dy < 0 then
+			dy = -cur_y
+		end
 	end
 	hl.dispatch(hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
 end
