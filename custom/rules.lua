@@ -3,6 +3,17 @@
 -- output had placed every effect into match.class, which is wrong).
 -- Window/layer rules: https://wiki.hyprland.org/Configuring/Window-Rules/
 
+-- Chrome/Electron file dialogs (open/save pickers) are hosted by the KDE
+-- xdg-desktop-portal backend. Its dialog titles vary ("Save File", "All
+-- Files", ...), so match by class and float + center every one of them;
+-- otherwise the portal places them near the parent window and the Save/
+-- Cancel buttons can end up off-screen.
+hl.window_rule({
+	match = { class = "^org\\.freedesktop\\.impl\\.portal\\.desktop\\.kde$" },
+	float = true,
+	center = true,
+})
+
 -- Jitsi screen-share indicator — shove offscreen (move needs both x and y).
 hl.window_rule({
 	match = { title = "^(jitsi\\.mulletware\\.io is sharing your screen.)$" },
@@ -196,3 +207,22 @@ do
 	end
 	term_focus_guard:set_enabled(term_visible)
 end
+
+-- dlna video picker — ephemeral floating terminal, same geometry the old
+-- hyprscratch scratchpad used (60%x80% at 20%/10%)
+hl.window_rule({
+	match = { title = "^dlna-picker$" },
+	float = true,
+	size = { "(monitor_w*0.60)", "(monitor_h*0.80)" },
+	move = { "(monitor_w*0.20)", "(monitor_h*0.10)" },
+})
+
+-- Floating windows don't grab focus on open the way tiled ones do (seen when
+-- the picker spawns over another floating window). Focus it explicitly on
+-- map; the window.active focus change then triggers pointer-focus.lua's
+-- jiggle, which re-resolves pointer/scroll focus under the cursor.
+hl.on("window.open", function(w)
+	if w and w.title == "dlna-picker" then
+		hl.dispatch(hl.dsp.focus({ window = "title:^dlna-picker$" }))
+	end
+end)

@@ -435,6 +435,14 @@ hl.bind(
 	{ description = "Shell: Toggle overview" }
 )
 
+-- dlna video picker: ephemeral floating alacritty, fresh instance every
+-- press, dies after selection (window rule in custom/rules.lua)
+hl.bind(
+	"ALT + SUPER + T",
+	hl.dsp.exec_cmd("alacritty --title dlna-picker -e dlna"),
+	{ description = "dlna: video picker" }
+)
+
 -- mpv: pause every running mpv at once (O: right-hand key, layer-safe per the
 -- QMK rule; script: ~/.local/bin/mpv-pause-all, sockets from mpv's
 -- scripts/auto-ipc.lua)
