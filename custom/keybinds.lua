@@ -435,6 +435,14 @@ hl.bind(
 	{ description = "Shell: Toggle overview" }
 )
 
+-- mpv: pause every running mpv at once (O: right-hand key, layer-safe per the
+-- QMK rule; script: ~/.local/bin/mpv-pause-all, sockets from mpv's
+-- scripts/auto-ipc.lua)
+hl.bind("SUPER + grave", function()
+	hl.dispatch(hl.dsp.focus({ workspace = workspace_in_group(1) }))
+	hl.exec_cmd("mpv-pause-all")
+end, { description = "mpv: pause all instances, jump to workspace 1 in group" })
+
 -- Window-leader mode (SUPER+W -> encoder resize, mirroring neovim's <C-w>).
 -- Loaded last and guarded by pcall so an error in winmode.lua can never take
 -- the rest of these custom binds down with it.
