@@ -1,0 +1,16 @@
+#!/bin/bash
+# VNC-session shim (on PATH only inside the ghost-desktop session; see
+# custom/env.lua). Only guard the end4 start-handler's `--watch` watchers:
+# a second watcher beside a physical session's cross-contaminates the
+# clipboards of both. Plain reads/writes (no --watch) always pass through.
+case " $* " in
+	*" --watch "*)
+		if "$HOME/.config/hypr/custom/scripts/vnc-shims/_solo_guard"; then
+			REALPATH="${PATH#"$HOME/.config/hypr/custom/scripts/vnc-shims:"}"
+			exec env PATH="$REALPATH" wl-paste "$@"
+		fi
+		exit 0
+		;;
+esac
+REALPATH="${PATH#"$HOME/.config/hypr/custom/scripts/vnc-shims:"}"
+exec env PATH="$REALPATH" wl-paste "$@"

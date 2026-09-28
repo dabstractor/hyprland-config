@@ -95,6 +95,17 @@ hl.unbind("SUPER + code:82")
 
 hl.unbind("SUPER + code:86")
 
+-- Volume/mute keys: end4 binds these straight to wpctl; custom/keybinds.lua
+-- re-binds all of them onto custom/scripts/volume-keys.sh (VNC sessions route
+-- to the thin-client laptop over the pulse tunnel, physical stays wpctl).
+hl.unbind("XF86AudioRaiseVolume")
+hl.unbind("XF86AudioLowerVolume")
+hl.unbind("XF86AudioMute")
+hl.unbind("ALT + XF86AudioMute")
+hl.unbind("XF86AudioMicMute")
+hl.unbind("SUPER + SHIFT + M")
+hl.unbind("SUPER + ALT + M")
+
 -- Reclaim SUPER+ALT+Equal from the end4 'Testing' notify-send bind; the pair
 -- is re-bound to cursor zoom in custom/keybinds.lua.
 hl.unbind("SUPER + ALT + Equal")

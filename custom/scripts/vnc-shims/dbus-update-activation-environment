@@ -1,0 +1,19 @@
+#!/bin/bash
+# VNC-session shim (on PATH only inside the ghost-desktop session; see
+# custom/env.lua). The end4 start-handler (hyprland/execs.lua) spawns
+#   dbus-update-activation-environment --all
+#   sleep 1 && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
+# both of which would poison the SHARED per-user activation environment with
+# this session's private state (ghd runtime dir, aquamarine LD_LIBRARY_PATH,
+# WLR_*/EGL overrides, PULSE_SERVER, private WAYLAND_DISPLAY socket name).
+# custom/execs.lua exports the correct explicit locator list itself
+# (WAYLAND_DISPLAY=wayland-ghd symlink + friends), recognizable here by the
+# caller already carrying WAYLAND_DISPLAY=wayland-ghd -- pass only that one
+# through, no-op everything else. Applies to both the dbus and --systemd
+# (user-manager) targets; in the VNC session only custom's curated call
+# should ever run.
+if [ "${WAYLAND_DISPLAY:-}" = "wayland-ghd" ]; then
+	REALPATH="${PATH#"$HOME/.config/hypr/custom/scripts/vnc-shims:"}"
+	exec env PATH="$REALPATH" dbus-update-activation-environment "$@"
+fi
+exit 0

@@ -7,14 +7,99 @@
 -- Put general config stuff here
 -- Here's a list of every variable: https://wiki.hyprland.org/Configuring/Variables/
 -- (custom/env.lua is already required by hyprland.lua before this file)
+--
+
+-- VNC (thin-client) output resilience — VNC SESSION ONLY (IS_VNC_SESSION
+-- gate; see custom/env.lua for why the old WLR_BACKENDS gate was unsafe:
+-- WLR_BACKENDS/WAYLAND_DISPLAY leak between sessions via the shared
+-- user-manager env, and when the headless branch misfired in a physical
+-- login the WAYLAND-1 rule poisoned the VT-switch display restore —
+-- atomic commit rejected EINVAL, black screen with only a cursor).
+-- Config-time monitor rules never apply to this output (it appears after
+-- config parse; rules are not re-run), and `hyprctl reload` RESETS it to
+-- defaults. The launcher (ghost-desktop-run) applies the scale once at
+-- start; these listeners keep it applied across reloads and output
+-- re-adds — re-applying only on drift. WAYLAND-1 lives in a namespace
+-- physical outputs (HDMI-A-*, DP-*) never enter.
+-- NOTE: this PINS the scale — comment these listeners out when
+-- experimenting with other scales live.
+if IS_VNC_SESSION then
+	local VNC_SCALE = 2
+	local function vnc_scale_check()
+		for _, m in ipairs(hl.get_monitors() or {}) do
+			if m.name == "WAYLAND-1" and m.scale ~= VNC_SCALE then
+				hl.monitor({
+					output = "WAYLAND-1",
+					mode = "preferred",
+					position = "auto",
+					scale = VNC_SCALE,
+				})
+				return
+			end
+		end
+	end
+
+	-- WAYLAND-1 monitor rule for RELOADs: at INITIAL start this output does
+	-- not exist during parse (the launcher applies scale via hyprctl eval);
+	-- on RELOAD the output exists and this rule re-applies it — keeping
+	-- reload from squashing it with the catch-all below.
+	hl.monitor({
+		output = "WAYLAND-1",
+		mode = "preferred",
+		position = "auto",
+		scale = 2,
+	})
+
+	hl.on("monitor.added", function(mon)
+		if mon and mon.name == "WAYLAND-1" then
+			vnc_scale_check()
+		end
+	end)
+	hl.on("monitor.layout_changed", vnc_scale_check)
+end
+
+-- Borders: every window carries a permanent 2px border; the inactive one is
+-- fully transparent, so focus switches only change border COLOR -- never size,
+-- never geometry, no resize-on-focus. Gaps are compensated so content
+-- geometry matches the old 1px-border layout exactly (measured empirically:
+-- content separation = 2*gaps_in + 2*border, content-to-edge margin =
+-- gaps_out + border). Old: 2*3+2*1 = 8px sep, 3+1 = 4px margin.
+-- New: 2*2+2*2 = 8px sep, 2+2 = 4px margin. Identical.
+-- HDR: Hyprland >= 0.55 auto-switches a monitor into HDR mode whenever it is
+-- HDR-capable and fullscreen/app content advertises HDR support. The monitor's
+-- HDMI infoframe then carries hdr=1, and the nvidia-drm kernel module's
+-- infoframe-change tracking injects extra planes into the atomic commit used
+-- to restore the display after a VT switch — the kernel rejects that commit
+-- (EINVAL) and the screen stays black with only a hardware cursor (Hyprland
+-- log: "crtc 205 failed restore"). Disable auto-HDR so the monitor stays in
+-- SDR and VT switching survives. See nvidia-drm "Infoframe changed on CRTC"
+-- in the kernel log for the trigger signature.
+hl.config({
+	render = {
+		cm_auto_hdr = false,
+	},
+})
 
 hl.config({
 	general = {
-		gaps_in = 3,
-		gaps_out = 3,
-		border_size = 1,
+		gaps_in = 2,
+		gaps_out = 2,
+		border_size = 2,
 		no_focus_fallback = true,
 		-- stop movefocus at the screen edge instead of wrapping
+	},
+})
+
+-- Active window border: quickshell panel's highlight color (Material You
+-- `primary` = Appearance.colors.colPrimary). Current value from
+-- ~/.local/state/quickshell/user/generated/colors.json -- the shell
+-- regenerates it on wallpaper change, so update the hex if the theme shifts.
+hl.config({
+	general = {
+		col = {
+			active_border = "#b9c9ce",
+			inactive_border = "rgba(0,0,0,0)", -- fully transparent: unfocused windows show no frame
+		},
 	},
 })
 

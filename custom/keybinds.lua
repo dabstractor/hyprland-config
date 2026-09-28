@@ -302,13 +302,30 @@ hl.bind("CTRL + ALT + SUPER + mouse_up", hl.dsp.window.swap({ direction = "left"
 hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_down", hl.dsp.window.swap({ direction = "down" }))
 hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_up", hl.dsp.window.swap({ direction = "up" }))
 
--- Overdrive volume controls
+-- Volume/mute keys -- routed through custom/scripts/volume-keys.sh (moved
+-- here from hyprland/keybinds.lua, end4 dir). Physical session: wpctl,
+-- byte-identical to the original end4 binds. VNC session: pactl over the
+-- ssh reverse tunnel to the client laptop + thinclient_osd mirror sync
+-- (see the script). These replace the old "overdrive" binds.
 hl.bind(
 	"XF86AudioRaiseVolume",
-	hl.dsp.exec_cmd("~/.config/hypr/scripts/increase_volume.sh 5"),
+	hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh up"),
 	{ locked = true, repeating = true }
 )
-hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("pamixer --allow-boost -d 5"), { locked = true, repeating = true })
+hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh down"), { locked = true, repeating = true })
+hl.bind("XF86AudioMute", hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh mute"), { locked = true })
+hl.bind(
+	"SUPER + SHIFT + M",
+	hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh mute"),
+	{ locked = true, description = "Media: Toggle mute" }
+)
+hl.bind("ALT + XF86AudioMute", hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh mic-mute"), { locked = true })
+hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh mic-mute"), { locked = true })
+hl.bind(
+	"SUPER + ALT + M",
+	hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh mic-mute"),
+	{ locked = true, description = "Media: Toggle mic" }
+)
 
 -- Resize windows — routed through resize_if_ok so the locked terminal is skipped.
 hl.bind("SUPER + Minus", function()
@@ -415,8 +432,35 @@ hl.bind("CTRL + ALT + SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port
 hl.bind("SUPER + ALT + Slash", hl.dsp.global("quickshell:panelFamilyCycle"))
 
 -- Voice typing (was: source ~/projects/voice-typing/hypr-binds.conf)
--- hl.bind("CTRL + ALT + SUPER + D", hl.dsp.exec_cmd("/home/dustin/projects/voice-typing/.venv/bin/voicectl toggle"))       -- big model (distil-large-v3 + small.en)
-hl.bind("SUPER + ALT + D", hl.dsp.exec_cmd("/home/dustin/projects/voice-typing/.venv/bin/voicectl toggle-lite")) -- little/lite model (small.en only)
+-- big model (distil-large-v3 + small.en); moved here from the tail of
+-- hyprland/keybinds.lua (end4 dir).
+hl.bind(
+	"CTRL + SUPER + ALT + D",
+	hl.dsp.exec_cmd("$HOME/.local/bin/voicectl toggle"),
+	{ description = "Voice: Toggle dictation (big model)" }
+)
+-- lite model (small.en only). Robust toggle (fixes silent no-op over VNC + after session flaps):
+--  1) ensures the daemon is up: voice-typing.service is PartOf=graphical-session.target,
+--     which headless VNC sessions never activate, and physical-session logouts stop it;
+--  2) pins XDG_RUNTIME_DIR to the systemd --user manager's runtime (/run/user/$(id -u)),
+--     where the daemon's control socket ALWAYS lives. The exec env inherits the session's
+--     runtime dir instead (e.g. /run/user/1000/ghd under VNC) and voicectl would search
+--     that, find no socket, and exit 2 ("daemon not running") even with the daemon up;
+--  3) waits (<=5 s, 0.1 s polls) for the socket so systemctl's async cold start cannot
+--     race the toggle. Identical behavior in physical and VNC sessions; errors flow to
+--     the session journal for future diagnosis.
+hl.bind(
+	"SUPER + ALT + D",
+	hl.dsp.exec_cmd(
+		'RD="/run/user/$(id -u)"; '
+			.. 'XDG_RUNTIME_DIR="$RD" systemctl --user start voice-typing.service; '
+			.. 'S="$RD/voice-typing/control.sock"; i=0; '
+			.. 'while [ "$i" -lt 50 ] && [ ! -S "$S" ]; do sleep 0.1; i=$((i+1)); done; '
+			.. 'XDG_RUNTIME_DIR="$RD" /home/dustin/projects/voice-typing/.venv/bin/voicectl toggle-lite'
+	)
+) -- little/lite model (small.en only)
+
+hl.bind("SUPER + E", hl.dsp.global("quickshell:overviewEmojiToggle"))
 
 ----------------------------------------------------------------------
 -- Dwindle split-direction toggle

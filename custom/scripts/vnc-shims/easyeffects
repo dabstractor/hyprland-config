@@ -1,0 +1,12 @@
+#!/bin/bash
+# VNC-session shim (on PATH only inside the ghost-desktop session; see
+# custom/env.lua). The end4 start-handler (hyprland/execs.lua) spawns this
+# binary unconditionally; a second instance beside a concurrently running
+# physical session would duplicate/conflict with the one the physical
+# session owns. Run it only when no physical session exists. The real
+# binary is resolved with this shim dir stripped from PATH.
+if "$HOME/.config/hypr/custom/scripts/vnc-shims/_solo_guard"; then
+	REALPATH="${PATH#"$HOME/.config/hypr/custom/scripts/vnc-shims:"}"
+	exec env PATH="$REALPATH" easyeffects "$@"
+fi
+exit 0

@@ -1,0 +1,6 @@
+#!/bin/bash
+# Shared guard for the singleton shims: exit 0 (caller runs the real binary)
+# when no physical Hyprland session owns the singleton, exit 1 (caller
+# no-ops) when one does. Thin wrapper over nested-solo.sh so each shim
+# stays a two-liner.
+exec "$HOME/.config/hypr/custom/scripts/nested-solo.sh"
