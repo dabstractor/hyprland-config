@@ -398,7 +398,7 @@ hl.bind("SUPER + SHIFT + Delete", hl.dsp.exec_cmd("systemctl suspend || loginctl
 
 -- Timewarrior
 hl.bind("SUPER + g", hl.dsp.global("quickshell:timewarriorStartOrStop"))
-hl.bind("ALT + SUPER + g", hl.dsp.global("quickshell:timewarriorEditTags"))
+hl.bind("SUPER + ALT + g", hl.dsp.global("quickshell:timewarriorEditTags"))
 
 -- Brave profiles
 hl.bind("SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 0"))
@@ -418,7 +418,15 @@ hl.bind("SUPER + ALT + Slash", hl.dsp.global("quickshell:panelFamilyCycle"))
 -- hl.bind("CTRL + ALT + SUPER + D", hl.dsp.exec_cmd("/home/dustin/projects/voice-typing/.venv/bin/voicectl toggle"))       -- big model (distil-large-v3 + small.en)
 hl.bind("SUPER + ALT + D", hl.dsp.exec_cmd("/home/dustin/projects/voice-typing/.venv/bin/voicectl toggle-lite")) -- little/lite model (small.en only)
 
-hl.bind("SUPER + e", hl.dsp.global("quickshell:overviewEmojiToggle"))
+----------------------------------------------------------------------
+-- Dwindle split-direction toggle
+----------------------------------------------------------------------
+
+-- SUPER+ALT+S was "Window: Send to scratchpad" (hyprland/keybinds.lua);
+-- re-purposed per user instruction. Needs dwindle.preserve_split = true
+-- (already set globally).
+hl.unbind("SUPER + ALT + S")
+hl.bind("SUPER + ALT + S", hl.dsp.layout("togglesplit"), { description = "Dwindle: toggle split direction" })
 
 hl.bind("SUPER + Tab", hl.dsp.global("quickshell:cyclenext"), { description = "Shell: Toggle overview" })
 hl.bind(
