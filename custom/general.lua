@@ -118,3 +118,16 @@ hl.config({
 		},
 	},
 })
+
+----------------------------------------------------------------------
+-- Anti-flashbang (native replacement for the quickshell-delivered shader,
+-- which was never actually present on this host). Soft-limits peak whites
+-- compositor-wide; tweak constants in shaders/anti-flashbang.glsl.
+-- When quickshell is removed, shellOverrides/ (which also tries to set a
+-- shader from the qs tree) gets deleted with it.
+----------------------------------------------------------------------
+hl.config({
+	decoration = {
+		screen_shader = os.getenv("HOME") .. "/.config/hypr/custom/shaders/anti-flashbang.glsl",
+	},
+})
