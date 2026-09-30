@@ -34,10 +34,36 @@ hl.env("AQ_DRM_DEVICES", igpu)
 
 hl.config({
 	debug = {
-		disable_logs = false,
+		-- RUN-7I (2026-09-22, sanctioned): was `false`. The runtime-dir
+		-- hyprland.log (DEBUG verbosity) grew to 3.3 GB and filled the
+		-- 3.2 GB /run/user/1000 tmpfs at 07:04:54 -> ENOSPC broke every
+		-- runtime-dir write in the session (wayle panel modules included;
+		-- evidence: wayle-config repo docs/design/evidence/run7i-tooltips/).
+		-- stdout logs stay ON (journald is size-bounded on /var, not tmpfs).
+		-- Rollback: env.lua.bak-7i-enospc (next to this file).
+		disable_logs = true,
 		enable_stdout_logs = true,
 		-- damage_tracking left at default (2) — that NVIDIA workaround only
 		-- applies when the compositor itself renders on NVIDIA, which it does
 		-- not on this host (Intel iGPU does).
 	},
 })
+
+----------------------------------------------------------------------
+-- Session PATH: this host's Hyprland is launched by /usr/bin/start-hyprland
+-- (compiled launcher, no login-shell PATH), so the session only inherited
+-- /usr/local/bin:/usr/bin:/var/lib/snapd/snap/bin. Binaries installed under
+-- ~/.cargo/bin (hyprscratch) and ~/.local/bin (whisparr-purge, user scripts)
+-- were invisible to hl.exec_cmd — every scratchpad bind died silently with
+-- "sh: hyprscratch: command not found". Prepend them for the whole session.
+-- (Root-caused 2026-09-19; full evidence: /tmp/hyprscratch-investigation.md)
+----------------------------------------------------------------------
+do
+	local home = os.getenv("HOME")
+	local old = os.getenv("PATH") or ""
+	-- Guard: hl.env applies on every reload and os.getenv() sees the previously
+	-- applied value — skip if already prepended so PATH doesn't grow per reload.
+	if not old:find(home .. "/.cargo/bin", 1, true) then
+		hl.env("PATH", home .. "/.cargo/bin:" .. home .. "/.local/bin:" .. old)
+	end
+end
