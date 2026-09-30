@@ -183,10 +183,54 @@ do
 	for _, w in ipairs(hl.get_windows()) do
 		-- Match the stable initialTitle, not the live title (now dynamic: see
 		-- custom/hyprscratch.lua). Keeps the guard in the right state across reloads.
-		if w.initial_title == "terminal" and w.mapped and w.workspace and not w.workspace.special and w.workspace.id > 0 then
+		if
+			w.initial_title == "terminal"
+			and w.mapped
+			and w.workspace
+			and not w.workspace.special
+		then
 			term_visible = true
 			break
 		end
 	end
 	term_focus_guard:set_enabled(term_visible)
 end
+
+----------------------------------------------------------------------
+-- Terminal-scratchpad float lock
+--
+-- hyprscratch only "sees" a scratchpad as shown when its window is floating
+-- (get_mode() filters on floating || tiled). If the scratchpad terminal ever
+-- gets tiled — e.g. an accidental SUPER+ALT+Space float toggle — every
+-- ALT+Space becomes a re-summon and it can never be hidden again
+-- (2026-09-19 incident). Self-heal instead of hoping: whenever the
+-- scratchpad terminal gains focus or moves between workspaces (hyprscratch's
+-- show/hide is a workspace move), re-assert floating. The guarded
+-- SUPER+ALT+Space rebind in custom/keybinds.lua is the other half.
+-- Escape hatch: delete this block (and the guarded bind) to unlock.
+----------------------------------------------------------------------
+local function assert_scratchpad_terminal_float(w)
+	if w == nil or w.initial_title ~= "terminal" then
+		return
+	end
+	if not w.floating then
+		hl.dispatch(hl.dsp.window.float({ action = "set", window = "address:" .. w.address }))
+	end
+end
+
+hl.on("window.active", function(w)
+	-- NB: docs say the second arg is 0/1 but builds send focus-reason enums
+	-- (observed 3); don't filter on it — the assert is idempotent.
+	assert_scratchpad_terminal_float(w)
+end)
+hl.on("window.move_to_workspace", function(w)
+	assert_scratchpad_terminal_float(w)
+end)
+
+-- dlna video picker — ephemeral floating terminal
+hl.window_rule({
+	match = { title = "^dlna-picker$" },
+	float = true,
+	size = { "(monitor_w*0.60)", "(monitor_h*0.80)" },
+	move = { "(monitor_w*0.20)", "(monitor_h*0.10)" },
+})

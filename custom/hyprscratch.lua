@@ -13,7 +13,6 @@ local function terminal_visible()
 			and w.mapped
 			and w.workspace
 			and not w.workspace.special
-			and w.workspace.id > 0
 		then
 			return true
 		end
@@ -58,7 +57,6 @@ local function find_visible_scratchpad(title)
 			and w.mapped
 			and w.workspace
 			and not w.workspace.special
-			and w.workspace.id > 0
 		then
 			return w
 		end
@@ -154,12 +152,48 @@ end
 ----------------------------------------------------------------------
 -- Binds
 --
+-- The two terminal scratchpads -- local `terminal` (ALT+Space) and remote
+-- `ghost-terminal` (CTRL+ALT+Space) -- are mutually exclusive: turning one
+-- ON hides the other if it is currently shown. Both are `sticky`, so a
+-- shown terminal is visible on EVERY workspace; "on the same workspace"
+-- therefore reduces to simply "shown" (find_visible_scratchpad). Turning one
+-- OFF leaves the other alone -- callers only invoke this when the toggle is
+-- about to be a SHOW (target not currently visible).
+local function hide_other_terminal(name)
+	local other = (name == "terminal") and "ghost-terminal" or "terminal"
+	if not find_visible_scratchpad(other) then
+		return
+	end
+	hl.exec_cmd("hyprscratch hide " .. other)
+	if other == "terminal" then
+		-- term-focus-guard must mirror terminal visibility; hyprscratch hide is
+		-- async, so re-sync shortly after it settles (same pattern as ALT+Space).
+		hl.timer(sync_term_focus_guard, { timeout = 150, type = "oneshot" })
+	end
+end
+
 -- The terminal is special: it IS the window term-focus-guard protects, so its
 -- toggle just syncs the guard rather than disarming it.
 hl.bind("ALT + Space", function()
+	-- SHOW toggle (terminal not currently visible)? A shown ghost-terminal
+	-- makes room first. A HIDE toggle (terminal visible) leaves ghost alone.
+	if not find_visible_scratchpad("terminal") then
+		hide_other_terminal("terminal")
+	end
 	hl.exec_cmd("hyprscratch toggle terminal")
 	-- hyprscratch toggle is async; re-check visibility shortly after it settles.
 	hl.timer(sync_term_focus_guard, { timeout = 150, type = "oneshot" })
+end)
+
+-- Remote terminal on ghost: explicit bind (NOT in the scratchpads table
+-- below) because it mirrors the ALT+Space terminal toggle -- including the
+-- mutual exclusion above. toggle_scratchpad still supplies the cold-launch
+-- focus fix every table entry gets.
+hl.bind("CTRL + ALT + Space", function()
+	if not find_visible_scratchpad("ghost-terminal") then
+		hide_other_terminal("ghost-terminal")
+	end
+	toggle_scratchpad("ghost-terminal", "ghost-terminal")
 end)
 
 -- Every other scratchpad goes through toggle_scratchpad so they all grab focus

@@ -245,3 +245,8 @@ hl.unbind("CTRL + Print")
 hl.unbind("CTRL + Print")
 
 -- splitratio -> freed for hyprscratch obsidian vault
+
+-- SUPER+ALT+Space (float/tile toggle) is reclaimed so it can be rebound with
+-- a guard: the scratchpad terminal must never be tiled (hyprscratch get_mode
+-- filter). See float lock in custom/rules.lua + rebind in custom/keybinds.lua.
+hl.unbind("SUPER + ALT + Space")
