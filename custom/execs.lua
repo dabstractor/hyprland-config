@@ -21,7 +21,7 @@ hl.on("hyprland.start", function()
 	-- start-rate-limit and stays dead for the whole session -> no screen share.
 	-- Now that Hyprland + the env are up, clear any failed state and restart the
 	-- portal stack so the Hyprland backend connects cleanly.
-	hl.exec_cmd("syncthing")
+	hl.exec_cmd("syncthing --no-browser")
 	hl.exec_cmd("udiskie")
 	hl.dispatch(hl.dsp.focus({ workspace = 15 }))
 	hl.exec_cmd("vicinae server")
