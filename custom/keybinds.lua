@@ -50,10 +50,14 @@ local function move_or_focus(dx, dy, direction)
 end
 
 -- First workspace id >= start_id that does not exist (the "gap").
+-- Hyprland 0.56: special/named workspaces have no numeric `id` (nil) --
+-- skip them or the table index below throws.
 local function first_empty_workspace(start_id)
 	local occupied = {}
 	for _, ws in ipairs(hl.get_workspaces()) do
-		occupied[ws.id] = true
+		if ws.id then
+			occupied[ws.id] = true
+		end
 	end
 	local gap = start_id
 	while occupied[gap] do
@@ -69,7 +73,7 @@ local function shift_workspaces_up(lo)
 	local gap = first_empty_workspace(lo)
 	local snapshot = {}
 	for _, ws in ipairs(hl.get_workspaces()) do
-		if ws.id >= lo and ws.id < gap then
+		if ws.id and ws.id >= lo and ws.id < gap then
 			local addrs = {}
 			for _, w in ipairs(ws:get_windows()) do
 				table.insert(addrs, w.address)
@@ -103,12 +107,17 @@ local function delete_workspace()
 	if not aws then
 		return
 	end
+	-- Hyprland 0.56: special/named workspaces have no numeric `id`; the
+	-- id-shifting model below only applies to numeric workspaces.
+	if not aws.id then
+		return
+	end
 	local active_id = aws.id
 	local shift_start = active_id + 1
 
 	local to_shift = {}
 	for _, ws in ipairs(hl.get_workspaces()) do
-		if ws.id >= shift_start and ws.windows > 0 then
+		if ws.id and ws.id >= shift_start and ws.windows > 0 then
 			local addrs = {}
 			for _, w in ipairs(ws:get_windows()) do
 				table.insert(addrs, w.address)
@@ -141,13 +150,18 @@ local function inject_workspace(mode)
 		return
 	end
 	local active_ws = aw.workspace
+	-- Hyprland 0.56: special/named workspaces have no numeric `id`; the
+	-- id-gap model below only applies to numeric workspaces.
+	if not active_ws.id then
+		return
+	end
 	local active_id = active_ws.id
 	local active_addr = aw.address
 
 	if mode == "after" then
 		local target = active_id + 1
 		for _, ws in ipairs(hl.get_workspaces()) do
-			if ws.id == target and ws.windows > 0 then
+			if ws.id and ws.id == target and ws.windows > 0 then
 				shift_workspaces_up(target)
 				break
 			end
@@ -290,6 +304,18 @@ hl.bind("CTRL + ALT + SUPER + mouse_up", hl.dsp.window.swap({ direction = "left"
 hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_down", hl.dsp.window.swap({ direction = "up" }))
 hl.bind("CTRL + ALT + SUPER + SHIFT + mouse_up", hl.dsp.window.swap({ direction = "down" }))
 
+-- Float/Tile toggle — guarded: the scratchpad terminal (initialTitle "terminal")
+-- must NEVER be tiled; hyprscratch's get_mode() filter ignores non-floating
+-- scratchpads, so a tiled terminal can only be re-summoned, never hidden.
+-- Belt to the suspenders in custom/rules.lua (auto re-float on focus/move).
+hl.bind("SUPER + ALT + Space", function()
+	local w = hl.get_active_window()
+	if w ~= nil and w.initial_title == "terminal" then
+		return
+	end
+	hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+end, { description = "Window: Float/Tile (terminal scratchpad locked floating)" })
+
 -- Overdrive volume controls
 hl.bind(
 	"XF86AudioRaiseVolume",
@@ -338,10 +364,6 @@ end, { locked = true, repeating = true })
 hl.bind("CTRL + SUPER + Period", function()
 	move_if_ok(8, 0)
 end, { locked = true, repeating = true })
-
--- Show/Hide bar (ags)
-hl.bind("ALT + SUPER + Z", hl.dsp.exec_cmd("agsv1 run-js 'toggleBarVisibility();'"))
-hl.bind("SUPER + Z", hl.dsp.exec_cmd("agsv1 run-js 'toggleCurrentWorkspaceBarVisibility();'"))
 
 -- Launcher
 hl.bind("SUPER + Space", hl.dsp.exec_cmd("vicinae toggle"))
@@ -398,6 +420,22 @@ hl.bind(
 	{ description = "Shell: Toggle overview" }
 )
 
+-- dlna video picker: ephemeral floating alacritty, fresh instance every
+-- press, dies after selection (window rule in custom/rules.lua)
+hl.bind(
+	"ALT + SUPER + T",
+	hl.dsp.exec_cmd("alacritty --title dlna-picker -e dlna"),
+	{ description = "dlna: video picker" }
+)
+
+-- mpv: pause every running mpv at once (O: right-hand key, layer-safe per the
+-- QMK rule; script: ~/.local/bin/mpv-pause-all, sockets from mpv's
+-- scripts/auto-ipc.lua)
+hl.bind("SUPER + grave", function()
+	hl.dispatch(hl.dsp.focus({ workspace = workspace_in_group(1) }))
+	hl.exec_cmd("mpv-pause-all")
+end, { description = "mpv: pause all instances, jump to workspace 1 in group" })
+
 ----------------------------------------------------------------------
 -- whisparr-purge: delete the title VLC is currently playing (muted
 -- headless script; see ~/.local/bin/whisparr-purge)
@@ -415,3 +453,8 @@ hl.bind("SUPER + SHIFT + D", hl.dsp.exec_cmd("/home/dustin/.local/bin/whisparr-p
 pcall(require, "custom.capture")
 
 pcall(require, "custom.winmode")
+
+-- Wayle integration (shell-port keybind transfer + layer rules). Same
+-- pcall pattern as winmode above: an error in wayle.lua can never take
+-- these custom binds down with it.
+pcall(require, "custom.wayle")
