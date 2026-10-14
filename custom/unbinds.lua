@@ -232,6 +232,10 @@ hl.unbind("CTRL+SHIFT + Escape")
 
 hl.unbind("SUPER + P")
 
+-- base keybinds.lua binds CTRL+SUPER+P to panelFamilyCycle; cleared so the
+-- custom brave bind on the same keys (custom/keybinds.lua) doesn't double-fire
+hl.unbind("CTRL + SUPER + P")
+
 hl.unbind("SUPER + Semicolon")
 
 -- splitratio -> freed for hyprscratch obsidian vault

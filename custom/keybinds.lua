@@ -3,190 +3,23 @@
 -- binds live in hyprland/keybinds.lua and are reclaimed via custom/unbinds.lua.
 
 ----------------------------------------------------------------------
--- Helpers (replace custom/scripts/tiledorfloating.sh + delete_workspace.sh
--- + inject_workspace.sh, which relied on the now-broken `hyprctl dispatch
--- <name> <params>` form and on jq).
+-- Helpers live in custom/lib/ (mirrors the base config's hyprland/lib/).
+-- This file is binds only; alias what each domain exports so bind bodies
+-- below read as they always did. (Replaced the old custom/scripts/*.sh
+-- helpers, which relied on the now-broken `hyprctl dispatch <name> <params>`
+-- form and on jq.)
 ----------------------------------------------------------------------
+local win = require("custom.lib.windows")
+local ws = require("custom.lib.workspaces")
 
--- The locked terminal scratchpad is launched with --title "terminal"; it is
--- immune to move/resize. Match the stable initialTitle, not the live title
--- (which is now dynamic: "terminal - <app>", driven by tmux set-titles).
-local function is_locked_terminal(win)
-	return win ~= nil and win.initial_title == "terminal"
-end
-
--- Resize active window by a relative delta; skip the locked terminal.
--- Also clamps against sub-zero sizes (Hyprland doesn't guard against
--- resizeactive driving a window below 0 px).
-local function resize_if_ok(dx, dy)
-	local w = hl.get_active_window()
-	if is_locked_terminal(w) then
-		return
-	end
-	if w ~= nil then
-		local cur_x, cur_y = w.size.x, w.size.y
-		if dx < 0 and cur_x + dx < 0 then
-			dx = -cur_x
-		end
-		if dy < 0 and cur_y + dy < 0 then
-			dy = -cur_y
-		end
-	end
-	hl.dispatch(hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
-end
-
--- Move the active (floating) window by a relative delta; skip the locked
--- terminal. No-op on tiled windows, matching old `moveactive` behavior.
-local function move_if_ok(dx, dy)
-	local w = hl.get_active_window()
-	if is_locked_terminal(w) then
-		return
-	end
-	hl.dispatch(hl.dsp.window.move({ x = dx, y = dy, relative = true }))
-end
-
--- Floating -> move by delta; Tiled -> focus in a direction. Skip locked terminal.
--- (Was: tiledorfloating.sh "moveactive Dx Dy" "movefocus <dir>".)
-local function move_or_focus(dx, dy, direction)
-	local w = hl.get_active_window()
-	if is_locked_terminal(w) then
-		return
-	end
-	if w and w.floating then
-		hl.dispatch(hl.dsp.window.move({ x = dx, y = dy, relative = true }))
-	else
-		hl.dispatch(hl.dsp.focus({ direction = direction }))
-	end
-end
-
--- First workspace id >= start_id that does not exist (the "gap").
-local function first_empty_workspace(start_id)
-	local occupied = {}
-	for _, ws in ipairs(hl.get_workspaces()) do
-		occupied[ws.id] = true
-	end
-	local gap = start_id
-	while occupied[gap] do
-		gap = gap + 1
-	end
-	return gap
-end
-
--- Snapshot every workspace in [lo, gap) with its window addresses, then move
--- each workspace's windows up by one — highest id first so a move never lands
--- in a workspace we still have to process.
-local function shift_workspaces_up(lo)
-	local gap = first_empty_workspace(lo)
-	local snapshot = {}
-	for _, ws in ipairs(hl.get_workspaces()) do
-		if ws.id >= lo and ws.id < gap then
-			local addrs = {}
-			for _, w in ipairs(ws:get_windows()) do
-				table.insert(addrs, w.address)
-			end
-			snapshot[ws.id] = addrs
-		end
-	end
-	local ids = {}
-	for id, _ in pairs(snapshot) do
-		table.insert(ids, id)
-	end
-	table.sort(ids, function(a, b)
-		return a > b
-	end)
-	for _, id in ipairs(ids) do
-		local target = id + 1
-		for _, addr in ipairs(snapshot[id]) do
-			hl.dispatch(hl.dsp.window.move({
-				workspace = target,
-				window = "address:" .. addr,
-				follow = false,
-			}))
-		end
-	end
-end
-
--- Pull every occupied workspace after the active one down by one, then refocus.
--- (Was: custom/scripts/delete_workspace.sh.)
-local function delete_workspace()
-	local aws = hl.get_active_workspace()
-	if not aws then
-		return
-	end
-	local active_id = aws.id
-	local shift_start = active_id + 1
-
-	local to_shift = {}
-	for _, ws in ipairs(hl.get_workspaces()) do
-		if ws.id >= shift_start and ws.windows > 0 then
-			local addrs = {}
-			for _, w in ipairs(ws:get_windows()) do
-				table.insert(addrs, w.address)
-			end
-			table.insert(to_shift, { id = ws.id, addrs = addrs })
-		end
-	end
-	table.sort(to_shift, function(a, b)
-		return a.id < b.id
-	end)
-	for _, entry in ipairs(to_shift) do
-		local target = entry.id - 1
-		for _, addr in ipairs(entry.addrs) do
-			hl.dispatch(hl.dsp.window.move({
-				workspace = target,
-				window = "address:" .. addr,
-				follow = false,
-			}))
-		end
-	end
-	hl.dispatch(hl.dsp.focus({ workspace = active_id }))
-end
-
--- "after": open a gap right after the active window's workspace and move the
--- active window into it. "before": isolate the active window on its own workspace
--- by pushing everything else on it up by one. (Was: inject_workspace.sh.)
-local function inject_workspace(mode)
-	local aw = hl.get_active_window()
-	if not aw or not aw.workspace then
-		return
-	end
-	local active_ws = aw.workspace
-	local active_id = active_ws.id
-	local active_addr = aw.address
-
-	if mode == "after" then
-		local target = active_id + 1
-		for _, ws in ipairs(hl.get_workspaces()) do
-			if ws.id == target and ws.windows > 0 then
-				shift_workspaces_up(target)
-				break
-			end
-		end
-		hl.dispatch(hl.dsp.window.move({
-			workspace = target,
-			window = "address:" .. active_addr,
-			follow = false,
-		}))
-		hl.dispatch(hl.dsp.focus({ workspace = target }))
-	elseif mode == "before" then
-		local target_for_others = active_id + 1
-		shift_workspaces_up(target_for_others)
-		local others = {}
-		for _, w in ipairs(active_ws:get_windows()) do
-			if w.address ~= active_addr then
-				table.insert(others, w.address)
-			end
-		end
-		for _, addr in ipairs(others) do
-			hl.dispatch(hl.dsp.window.move({
-				workspace = target_for_others,
-				window = "address:" .. addr,
-				follow = false,
-			}))
-		end
-		hl.dispatch(hl.dsp.focus({ workspace = active_id }))
-	end
-end
+local resize_if_ok = win.resize_if_ok
+local move_if_ok = win.move_if_ok
+local move_or_focus = win.move_or_focus
+local cycle_fs_aware = win.cycle_fs_aware
+local zoomfunction = win.zoomfunction
+local carry_window = ws.carry_window
+local inject_workspace = ws.inject_workspace
+local delete_workspace = ws.delete_workspace
 
 ----------------------------------------------------------------------
 -- Workspace switching (relative selectors MUST be strings in 0.55)
@@ -214,37 +47,9 @@ hl.bind("SUPER + SHIFT + L", hl.dsp.window.move({ workspace = "+1" }))
 hl.bind("SUPER + SHIFT + J", hl.dsp.window.move({ workspace = "+5" }))
 hl.bind("SUPER + SHIFT + K", hl.dsp.window.move({ workspace = "-5" }))
 
--- Scroll-wheel window carrying (SUPER+SHIFT+wheel) is debounced rather than
--- dispatched per tick. Each `movetoworkspace`+follow (window.move above) is a
--- heavy operation: it relocates the window, relayouts, follows onto the target,
--- and replays the workspaces-slide + window-popin animations. Unlike a plain
--- `focus`, those can't be interrupted cleanly mid-flight, so a fast scroll
--- visibly "loads" every intermediate workspace one by one. scroll_event_delay=0
--- fixed plain focus by killing the input throttle, but movetoworkspace's own
--- per-dispatch cost still serializes. Accumulating the signed delta and firing
--- ONE movetoworkspace `±N` shortly after scrolling settles makes the window land
--- exactly N workspaces away in a single transition. Keyboard sends
--- (SHIFT+H/L/J/K above) stay direct since they're discrete presses, not bursts.
-local CARRY_SETTLE_MS = 30
-local carry_accumulator = 0
-local carry_timer = nil
-
-local function carry_flush()
-	carry_timer = nil
-	local total = carry_accumulator
-	carry_accumulator = 0
-	if total ~= 0 then
-		hl.dispatch(hl.dsp.window.move({ workspace = (total >= 0 and "+" or "") .. total }))
-	end
-end
-
-local function carry_window(delta)
-	carry_accumulator = carry_accumulator + delta
-	if carry_timer then
-		carry_timer:set_enabled(false)
-	end
-	carry_timer = hl.timer(carry_flush, { timeout = CARRY_SETTLE_MS, type = "oneshot" })
-end
+-- Scroll-wheel window carrying (SUPER+SHIFT+wheel): debounced, fires ONE
+-- movetoworkspace ±N after scrolling settles (rationale in custom/lib/
+-- workspaces.lua). Keyboard sends below stay direct — discrete presses.
 
 hl.bind("SUPER + SHIFT + mouse_down", function()
 	carry_window(1)
@@ -259,9 +64,15 @@ hl.bind("CTRL + SUPER + L", hl.dsp.focus({ direction = "right" }))
 hl.bind("CTRL + SUPER + K", hl.dsp.focus({ direction = "up" }))
 hl.bind("CTRL + SUPER + J", hl.dsp.focus({ direction = "down" }))
 
--- Cycle windows (history-based, like Alt+Tab)
-hl.bind("SUPER + Tab", hl.dsp.window.cycle_next())
-hl.bind("SUPER + SHIFT + Tab", hl.dsp.window.cycle_next({ next = false }))
+-- Cycle windows (history-based, like Alt+Tab). Implementation (fullscreen-
+-- aware: the window we land on inherits the fullscreen/maximized state of the
+-- one we left) lives in custom/lib/windows.lua.
+hl.bind("SUPER + Tab", function()
+	cycle_fs_aware(true)
+end)
+hl.bind("SUPER + SHIFT + Tab", function()
+	cycle_fs_aware(false)
+end)
 
 -- Move windows (tiled) / Focus windows (floating)
 hl.bind("CTRL + SUPER + mouse_down", function()
@@ -312,14 +123,22 @@ hl.bind(
 	hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh up"),
 	{ locked = true, repeating = true }
 )
-hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh down"), { locked = true, repeating = true })
+hl.bind(
+	"XF86AudioLowerVolume",
+	hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh down"),
+	{ locked = true, repeating = true }
+)
 hl.bind("XF86AudioMute", hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh mute"), { locked = true })
 hl.bind(
 	"SUPER + SHIFT + M",
 	hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh mute"),
 	{ locked = true, description = "Media: Toggle mute" }
 )
-hl.bind("ALT + XF86AudioMute", hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh mic-mute"), { locked = true })
+hl.bind(
+	"ALT + XF86AudioMute",
+	hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh mic-mute"),
+	{ locked = true }
+)
 hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/volume-keys.sh mic-mute"), { locked = true })
 hl.bind(
 	"SUPER + ALT + M",
@@ -370,18 +189,8 @@ end, { locked = true, repeating = true })
 
 -- Cursor zoom (screen magnifier centered on the cursor; zoom_rigid = false so
 -- the magnified region tracks the cursor). The end4 default SUPER+-/= zoom
--- binds were reclaimed above for resize; these replace them. zoomfunction is
--- local to hyprland/keybinds.lua, so re-declare it here.
-local function zoomfunction(value)
-	local zoomvalue = hl.get_config("cursor:zoom_factor")
-	if (zoomvalue + value) > 3.0 then
-		hl.config({ cursor = { zoom_factor = 3.0 } })
-	elseif (zoomvalue + value) < 1.0 then
-		hl.config({ cursor = { zoom_factor = 1.0 } })
-	else
-		hl.config({ cursor = { zoom_factor = zoomvalue + value } })
-	end
-end
+-- binds were reclaimed above for resize; these replace them. Impl in
+-- custom/lib/windows.lua (zoomfunction).
 hl.bind("SUPER + ALT + Minus", function()
 	zoomfunction(-0.3)
 end, { repeating = true, description = "Screen: Zoom out" })
@@ -478,7 +287,10 @@ hl.bind("SUPER + E", hl.dsp.global("quickshell:overviewEmojiToggle"))
 hl.unbind("SUPER + ALT + S")
 hl.bind("SUPER + ALT + S", hl.dsp.layout("togglesplit"), { description = "Dwindle: toggle split direction" })
 
-hl.bind("SUPER + Tab", hl.dsp.global("quickshell:cyclenext"), { description = "Shell: Toggle overview" })
+-- NOTE: SUPER+Tab used to ALSO bind quickshell:cyclenext here. Identical
+-- duplicate binds BOTH fire in 0.56 (no last-wins), so Super+Tab was
+-- double-cycling; removed in favor of the fullscreen-aware cycle_fs_aware
+-- bind above. ALT+SUPER+Tab keeps the quickshell overview.
 hl.bind(
 	"ALT + SUPER + Tab",
 	hl.dsp.global("quickshell:overviewWorkspacesToggle"),

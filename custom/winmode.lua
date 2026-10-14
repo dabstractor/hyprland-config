@@ -33,10 +33,10 @@ local MODE_TIMEOUT_MS = 1000 -- auto-exit after this much INACTIVITY (entry + ev
 local CARRY_SETTLE_MS = 30 -- debounce window for workspace-carry (movetoworkspace serializes on rapid ticks)
 
 -- The locked terminal scratchpad (launched with --title "terminal") is immune
--- to move/resize. Same guard the main keybinds file uses.
-local function is_locked_terminal(win)
-	return win ~= nil and (win.initial_title == "terminal" or win.title == "terminal")
-end
+-- to move/resize. Single source of truth: custom/lib/windows.lua. (The old
+-- local copy also matched the live title, which only transiently equals
+-- "terminal" before tmux renames it — behaviorally identical.)
+local is_locked_terminal = require("custom.lib.windows").is_locked_terminal
 
 local function resize_if_ok(dx, dy)
 	local w = hl.get_active_window()
