@@ -5,7 +5,6 @@
 -- + refresh-pointer-focus.sh). Registered at parse time via top-level hl.on.
 pcall(require, "custom.pointer-focus")
 
-
 -- Activity-following singletons: ANY activity in THIS session re-homes
 -- the user-global services (hyprscratch, launcher spawn routing) here via
 -- session-steal — focus changes of any kind (click/hover/cycle/alt-tab),
@@ -22,10 +21,18 @@ local function _steal()
 		hl.exec_cmd("/home/dustin/.local/bin/session-steal --quiet")
 	end
 end
-hl.on("window.active", function() _steal() end)
-hl.on("workspace.active", function() _steal() end)
-hl.on("window.open", function() _steal() end)
-hl.on("input.keyboard.key", function() _steal() end)
+hl.on("window.active", function()
+	_steal()
+end)
+hl.on("workspace.active", function()
+	_steal()
+end)
+hl.on("window.open", function()
+	_steal()
+end)
+hl.on("input.keyboard.key", function()
+	_steal()
+end)
 
 hl.on("hyprland.start", function()
 	-- Steal the user-global singletons immediately on session start (the
@@ -46,8 +53,14 @@ hl.on("hyprland.start", function()
 	if IS_VNC_SESSION then
 		-- VNC/headless instance: explicit locator list only (see
 		-- hyprland/execs.lua for why --all is forbidden here).
+		-- PATH must NOT be imported: it pushed this session's PATH (manager
+		-- PATH + login enrichment) back into the user manager on EVERY session
+		-- start, compounding monotonically (exponentially while the launcher's
+		-- old capture doubled it) until the manager PATH exceeded the kernel's
+		-- MAX_ARG_STRLEN and every user-unit exec died with E2BIG (2026-09-28).
+		-- PATH is not a session locator; ghost-desktop-run sets it for the tree.
 		hl.exec_cmd(
-			"env WAYLAND_DISPLAY=wayland-ghd dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE PATH"
+			"env WAYLAND_DISPLAY=wayland-ghd dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE"
 		)
 	else
 		hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
@@ -59,10 +72,11 @@ hl.on("hyprland.start", function()
 	-- Now that Hyprland + the env are up, clear any failed state and restart the
 	-- portal stack so the Hyprland backend connects cleanly.
 	hl.exec_cmd(
-		solo .. "sleep 2; systemctl --user reset-failed xdg-desktop-portal-hyprland 2>/dev/null; systemctl --user restart xdg-desktop-portal-hyprland xdg-desktop-portal"
+		solo
+			.. "sleep 2; systemctl --user reset-failed xdg-desktop-portal-hyprland 2>/dev/null; systemctl --user restart xdg-desktop-portal-hyprland xdg-desktop-portal"
 	)
 	hl.exec_cmd("mkdir -p /run/user/1000/hyprpm")
-	hl.exec_cmd(solo .. "syncthing")
+	hl.exec_cmd(solo .. "syncthing --no-browser")
 	hl.exec_cmd(solo .. "udiskie")
 	hl.dispatch(hl.dsp.focus({ workspace = 15 }))
 	hl.exec_cmd(solo .. "vicinae server")
