@@ -418,15 +418,21 @@ hl.bind("SUPER + g", hl.dsp.global("quickshell:timewarriorStartOrStop"))
 hl.bind("SUPER + ALT + g", hl.dsp.global("quickshell:timewarriorEditTags"))
 
 -- Brave profiles
+-- SUPER+P: default launch (Profile 0, "Dmanke main")
 hl.bind("SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 0"))
-hl.bind("CTRL + SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 1"))
-hl.bind("ALT + SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 2"))
-hl.bind("SHIFT + SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 8"))
+-- CTRL+SUPER+P: secondary profile ("Dustin D Schultz", Profile 4)
 hl.bind(
-	"SHIFT + ALT + SUPER + P",
-	hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 3")
+	"CTRL + SUPER + P",
+	hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 4"),
+	{ description = "Brave: Dustin D Schultz profile" }
 )
-hl.bind("CTRL + ALT + SUPER + P", hl.dsp.exec_cmd("brave --remote-debugging-port=9222 --profile-directory=Profile\\ 4"))
+-- ALT+SUPER+P: profile picker (fuzzel menu; hides profiles with open windows).
+-- No other profile has a dedicated hotkey — reachable via the picker.
+hl.bind(
+	"ALT + SUPER + P",
+	hl.dsp.exec_cmd("$HOME/.config/hypr/custom/scripts/brave-profile-picker.sh"),
+	{ description = "Brave: profile picker" }
+)
 
 -- Cycle panel family
 hl.bind("SUPER + ALT + Slash", hl.dsp.global("quickshell:panelFamilyCycle"))
